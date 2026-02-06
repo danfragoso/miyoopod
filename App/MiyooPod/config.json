@@ -1,0 +1,6 @@
+{
+  "label": "MiyooPod",
+  "icon": "./assets/icn.png",
+  "launch": "launch.sh",
+  "description": "iPod-style Music Player"
+}
