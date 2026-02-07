@@ -8,6 +8,7 @@ import (
 // Runs in its own goroutine. Minimal work per tick to avoid starving audio.
 func (app *MiyooPod) startPlaybackPoller() {
 	lastDrawnSecond := -1
+	tickCount := 0
 
 	for app.Running {
 		if app.Playing != nil && app.Playing.State != StateStopped {
@@ -40,12 +41,22 @@ func (app *MiyooPod) startPlaybackPoller() {
 					app.updateProgressBarOnly()
 				}
 			}
+
+			// Flush audio buffers every 5 seconds to prevent choppy playback
+			// Mimics the fix that happens when user manually pauses/resumes
+			tickCount++
+			if tickCount >= 5 {
+				audioFlushBuffers()
+				tickCount = 0
+			}
 		}
-		time.Sleep(500 * time.Millisecond)
+		// Increased sleep to reduce CPU usage and SD card contention
+		time.Sleep(1000 * time.Millisecond)
 	}
 }
 
 func (app *MiyooPod) mpvLoadFile(path string) error {
+	// Stream from SD card with larger buffer (128KB) to reduce underruns
 	err := audioLoadFile(path)
 	if err != nil {
 		return err

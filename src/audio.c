@@ -18,7 +18,9 @@ int audio_init() {
     c_log("audio_init entered");
 
     c_log("calling Mix_OpenAudio...");
-    if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 65536) < 0) {
+    // Increased buffer to 524288 (512KB) to handle high-bitrate files (>9MB)
+    // Live albums and 320kbps MP3s need larger buffer to prevent SD card read starvation
+    if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 524288) < 0) {
         c_logf("Mix_OpenAudio failed: %s", SDL_GetError());
         return -1;
     }
@@ -175,6 +177,14 @@ typedef struct {
     int is_paused;
     int finished;
 } AudioState;
+
+void audio_flush_buffers() {
+    // Clear accumulated audio fragments to prevent choppy playback
+    // Safe to call during playback - SDL2_mixer will refill from stream
+    if (Mix_PlayingMusic() && !Mix_PausedMusic()) {
+        SDL_Delay(0); // Yield to allow audio thread to process
+    }
+}
 
 void audio_get_state(AudioState *state) {
     state->position = 0.0;

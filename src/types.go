@@ -8,6 +8,13 @@ import (
 	"golang.org/x/image/font"
 )
 
+// App metadata
+const (
+	APP_VERSION = "1.0.0"
+	APP_AUTHOR  = "Dan Fragoso"
+	DONATE_URL  = "https://github.com/danfragoso/miyoopod"
+)
+
 // Display constants - identical to GaugeBoy
 const SCREEN_WIDTH = 640
 const SCREEN_HEIGHT = 480
@@ -15,6 +22,7 @@ const SCREEN_HEIGHT = 480
 // Music source
 const MUSIC_ROOT = "/mnt/SDCARD/Media/Music/"
 const LIBRARY_JSON_PATH = "/mnt/SDCARD/Media/Music/.miyoopod_library.json"
+const ARTWORK_DIR = "/mnt/SDCARD/Media/Music/.miyoopod_artwork/"
 
 // UI layout constants (at 640x480 native resolution)
 const (
@@ -409,9 +417,10 @@ type Album struct {
 	Name    string      `json:"name"`
 	Artist  string      `json:"artist"`
 	Tracks  []*Track    `json:"-"` // Reconstructed from library tracks
-	ArtData []byte      `json:"-"` // Don't store in JSON, re-extract from files
+	ArtData []byte      `json:"-"` // Don't store in JSON, only used temporarily during extraction
 	ArtExt  string      `json:"-"`
-	ArtImg  image.Image `json:"-"` // Decoded at runtime
+	ArtPath string      `json:"artPath,omitempty"` // Path to saved artwork file (from MusicBrainz)
+	ArtImg  image.Image `json:"-"`                 // Decoded at runtime
 }
 
 type Artist struct {
@@ -465,6 +474,7 @@ type MenuItem struct {
 	Action     func()
 	Submenu    *MenuScreen
 	Track      *Track
+	Album      *Album // For album preview display
 }
 
 type MenuScreen struct {
@@ -569,6 +579,9 @@ type MiyooPod struct {
 	LockKey              Key // Which key is used for lock/unlock (default Y)
 
 	// Queue view state
-	QueueScrollOffset  int // Scroll position for queue view
+	QueueScrollOffset int // Scroll position for queue view
+
+	// Album art status callback
+	albumArtStatusFunc func(string)
 	QueueSelectedIndex int // Selected track in queue view
 }

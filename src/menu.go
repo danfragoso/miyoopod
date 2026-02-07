@@ -90,6 +90,14 @@ func (app *MiyooPod) buildRootMenu() *MenuScreen {
 		})
 	}
 
+	// About
+	items = append(items, &MenuItem{
+		Label: "About",
+		Action: func() {
+			app.showAboutScreen()
+		},
+	})
+
 	// Settings
 	settingsMenu := &MenuScreen{
 		Title:  "Settings",
@@ -109,6 +117,14 @@ func (app *MiyooPod) buildRootMenu() *MenuScreen {
 		Label: "Scan Library",
 		Action: func() {
 			app.rescanLibrary()
+		},
+	})
+
+	// Scan Album Art
+	items = append(items, &MenuItem{
+		Label: "Scan Album Art",
+		Action: func() {
+			app.scanAlbumArt()
 		},
 	})
 
@@ -168,6 +184,7 @@ func (app *MiyooPod) buildArtistMenuItems(root *MenuScreen) []*MenuItem {
 						Label:      alb.Name,
 						HasSubmenu: true,
 						Submenu:    trackMenu,
+						Album:      alb, // Store album reference for preview
 					})
 				}
 				return albumItems
@@ -197,6 +214,7 @@ func (app *MiyooPod) buildAlbumMenuItems(root *MenuScreen) []*MenuItem {
 			Label:      alb.Name + " - " + alb.Artist,
 			HasSubmenu: true,
 			Submenu:    trackMenu,
+			Album:      alb, // Store album reference for preview
 		})
 	}
 	return items
@@ -375,8 +393,6 @@ func (ms *MenuScreen) adjustScroll() {
 
 // drawMenuScreen renders the current menu
 func (app *MiyooPod) drawMenuScreen() {
-	dc := app.DC
-
 	if len(app.MenuStack) == 0 {
 		return
 	}
@@ -388,6 +404,20 @@ func (app *MiyooPod) drawMenuScreen() {
 		current.Items = current.Builder()
 		current.Built = true
 	}
+
+	// Check if this is an album list (has albums in menu items)
+	isAlbumList := len(current.Items) > 0 && current.Items[0].Album != nil
+
+	if isAlbumList {
+		app.drawAlbumListWithPreview(current)
+	} else {
+		app.drawStandardMenu(current)
+	}
+}
+
+// drawStandardMenu renders a normal menu without preview panel
+func (app *MiyooPod) drawStandardMenu(current *MenuScreen) {
+	dc := app.DC
 
 	// Background
 	dc.SetHexColor(app.CurrentTheme.BG)
@@ -421,6 +451,154 @@ func (app *MiyooPod) drawMenuScreen() {
 
 	// Scroll bar
 	app.drawScrollBar(len(current.Items), current.ScrollOff, VISIBLE_ITEMS)
+}
+
+// drawAlbumListWithPreview renders the album list with preview panel on the right
+func (app *MiyooPod) drawAlbumListWithPreview(current *MenuScreen) {
+	dc := app.DC
+
+	// Background
+	dc.SetHexColor(app.CurrentTheme.BG)
+	dc.Clear()
+
+	// Header
+	app.drawHeader(current.Title)
+
+	if len(current.Items) == 0 {
+		dc.SetFontFace(app.FontMenu)
+		dc.SetHexColor(app.CurrentTheme.Dim)
+		dc.DrawStringWrapped("No items", SCREEN_WIDTH/2, SCREEN_HEIGHT/2, 0.5, 0.5, 400, 1.5, gg.AlignCenter)
+		return
+	}
+
+	// Split screen: 70% for list, 30% for preview
+	listWidth := int(float64(SCREEN_WIDTH) * 0.7)
+	previewX := listWidth + 10
+
+	// Draw menu items (left half)
+	endIdx := current.ScrollOff + VISIBLE_ITEMS
+	if endIdx > len(current.Items) {
+		endIdx = len(current.Items)
+	}
+
+	for i := current.ScrollOff; i < endIdx; i++ {
+		item := current.Items[i]
+		y := MENU_TOP_Y + (i-current.ScrollOff)*MENU_ITEM_HEIGHT
+		selected := i == current.SelIndex
+
+		// Draw item in left half only
+		if selected {
+			dc.SetHexColor(app.CurrentTheme.SelBG)
+			dc.DrawRectangle(0, float64(y), float64(listWidth), MENU_ITEM_HEIGHT)
+			dc.Fill()
+		}
+
+		dc.SetFontFace(app.FontMenu)
+		if selected {
+			dc.SetHexColor(app.CurrentTheme.SelTxt)
+		} else {
+			dc.SetHexColor(app.CurrentTheme.ItemTxt)
+		}
+
+		// Truncate text to fit left panel
+		maxWidth := float64(listWidth - 30)
+		displayText := app.truncateText(item.Label, maxWidth, app.FontMenu)
+		dc.DrawString(displayText, 15, float64(y+MENU_ITEM_HEIGHT/2+6))
+
+		if item.HasSubmenu {
+			dc.DrawString(">", float64(listWidth-20), float64(y+MENU_ITEM_HEIGHT/2+6))
+		}
+	}
+
+	// Draw vertical separator
+	dc.SetHexColor(app.CurrentTheme.Dim)
+	dc.SetLineWidth(1)
+	dc.DrawLine(float64(listWidth), HEADER_HEIGHT, float64(listWidth), SCREEN_HEIGHT)
+	dc.Stroke()
+
+	// Draw scroll bar for list
+	if len(current.Items) > VISIBLE_ITEMS {
+		scrollBarHeight := float64(SCREEN_HEIGHT-HEADER_HEIGHT) * float64(VISIBLE_ITEMS) / float64(len(current.Items))
+		scrollBarY := HEADER_HEIGHT + float64(SCREEN_HEIGHT-HEADER_HEIGHT)*float64(current.ScrollOff)/float64(len(current.Items))
+
+		dc.SetHexColor(app.CurrentTheme.Dim)
+		dc.DrawRectangle(float64(listWidth-5), scrollBarY, 3, scrollBarHeight)
+		dc.Fill()
+	}
+
+	// Draw album preview (right half)
+	if current.SelIndex >= 0 && current.SelIndex < len(current.Items) {
+		selectedItem := current.Items[current.SelIndex]
+		if selectedItem.Album != nil {
+			app.drawAlbumPreview(selectedItem.Album, previewX, HEADER_HEIGHT+10, SCREEN_WIDTH-previewX-10)
+		}
+	}
+}
+
+// drawAlbumPreview draws album art and info in the preview panel
+func (app *MiyooPod) drawAlbumPreview(album *Album, x, y, width int) {
+	dc := app.DC
+
+	centerX := x + width/2
+	yPos := y
+
+	// Draw album art
+	artSize := 200
+	if artSize > width-20 {
+		artSize = width - 20
+	}
+
+	coverImg := app.getCachedCover(album, artSize)
+	if coverImg == nil {
+		// Use default art
+		coverImg = app.DefaultArt
+	}
+
+	artX := centerX - artSize/2
+	app.fastBlitImage(coverImg, artX, yPos)
+
+	// Border around art
+	dc.SetHexColor(app.CurrentTheme.Dim)
+	dc.SetLineWidth(1)
+	dc.DrawRectangle(float64(artX), float64(yPos), float64(artSize), float64(artSize))
+	dc.Stroke()
+
+	yPos += artSize + 30
+
+	// Album name
+	dc.SetFontFace(app.FontMenu)
+	dc.SetHexColor(app.CurrentTheme.ItemTxt)
+	albumText := app.truncateText(album.Name, float64(width-20), app.FontMenu)
+	dc.DrawStringAnchored(albumText, float64(centerX), float64(yPos), 0.5, 0)
+	yPos += 25
+
+	// Artist
+	dc.SetFontFace(app.FontArtist)
+	dc.SetHexColor(app.CurrentTheme.Dim)
+	artistText := app.truncateText(album.Artist, float64(width-20), app.FontArtist)
+	dc.DrawStringAnchored(artistText, float64(centerX), float64(yPos), 0.5, 0)
+	yPos += 30
+
+	// Get year from first track
+	year := 0
+	if len(album.Tracks) > 0 && album.Tracks[0] != nil {
+		year = album.Tracks[0].Year
+	}
+
+	// Info: tracks and year
+	dc.SetFontFace(app.FontSmall)
+	dc.SetHexColor(app.CurrentTheme.ItemTxt)
+
+	trackText := fmt.Sprintf("%d track", len(album.Tracks))
+	if len(album.Tracks) != 1 {
+		trackText += "s"
+	}
+
+	if year > 0 {
+		dc.DrawStringAnchored(fmt.Sprintf("%s • %d", trackText, year), float64(centerX), float64(yPos), 0.5, 0)
+	} else {
+		dc.DrawStringAnchored(trackText, float64(centerX), float64(yPos), 0.5, 0)
+	}
 }
 
 // refreshRootMenu updates the root menu to include/exclude Now Playing

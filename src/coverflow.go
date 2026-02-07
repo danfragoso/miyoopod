@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"image"
 
@@ -44,12 +45,27 @@ func (app *MiyooPod) getCachedCover(album *Album, size int) image.Image {
 	}
 
 	if album.ArtImg == nil {
-		defaultKey := fmt.Sprintf("__default__%d", size)
-		if cached, ok := app.Coverflow.CoverCache[defaultKey]; ok {
-			app.Coverflow.CoverCache[key] = cached
-			return cached
+		// Try loading from disk if we have a saved path
+		if album.ArtPath != "" {
+			if err := app.loadAlbumArtwork(album); err == nil {
+				// Decode the loaded artwork
+				reader := bytes.NewReader(album.ArtData)
+				if img, _, err := image.Decode(reader); err == nil {
+					album.ArtImg = img
+					album.ArtData = nil // Free memory immediately
+				}
+			}
 		}
-		return app.DefaultArt
+
+		// Still no image? Use default
+		if album.ArtImg == nil {
+			defaultKey := fmt.Sprintf("__default__%d", size)
+			if cached, ok := app.Coverflow.CoverCache[defaultKey]; ok {
+				app.Coverflow.CoverCache[key] = cached
+				return cached
+			}
+			return app.DefaultArt
+		}
 	}
 
 	// Fallback: resize on demand (should not happen if startup pre-caching is correct)

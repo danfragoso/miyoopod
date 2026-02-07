@@ -363,7 +363,7 @@ func (app *MiyooPod) drawStatusBar() {
 		app.drawButtonLegend(12, centerY, "A", "Select")
 		app.drawButtonLegend(130, centerY, "B", "Back")
 		if app.Playing != nil && app.Playing.State != StateStopped {
-			app.drawButtonLegend(235, centerY, "START", "Pause")
+			app.drawButtonLegend(235, centerY, "START", "Now Playing")
 		}
 		// Only show "Add to Queue" if we're viewing a track list and not playing
 		if len(app.MenuStack) > 0 {
@@ -377,9 +377,9 @@ func (app *MiyooPod) drawStatusBar() {
 		}
 	case ScreenNowPlaying:
 		app.drawButtonLegend(12, centerY, "B", "Back")
-		app.drawButtonLegend(110, centerY, "START", "Play/Pause")
-		app.drawButtonLegend(290, centerY, "L/R", "Prev/Next")
-		app.drawButtonLegend(420, centerY, "→", "Queue")
+		app.drawButtonLegend(110, centerY, "A", "Play/Pause")
+		app.drawButtonLegend(270, centerY, "L/R", "Prev/Next")
+		app.drawButtonLegend(400, centerY, "→", "Queue")
 	case ScreenQueue:
 		app.drawButtonLegend(12, centerY, "B", "Back")
 		app.drawButtonLegend(100, centerY, "A", "Play")

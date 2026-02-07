@@ -2,5 +2,7 @@
   "label": "MiyooPod",
   "icon": "./assets/icn.png",
   "launch": "launch.sh",
-  "description": "iPod-style Music Player"
+  "description": "MP3 player for the Miyoo Mini",
+  "developer": "danilo.fragoso@gmail.com",
+  "version": "0.0.1"
 }

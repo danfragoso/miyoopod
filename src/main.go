@@ -12,6 +12,7 @@ import "C"
 import (
 	"fmt"
 	"image"
+	"os"
 	"runtime"
 	"time"
 	"unsafe"
@@ -71,16 +72,13 @@ func (app *MiyooPod) Init() {
 	// Set initial volume (scale 0-100 to 0-128)
 	audioSetVolume(int(app.Playing.Volume))
 
-	// Draw initial screen
-	app.DC.SetHexColor(app.CurrentTheme.BG)
-	app.DC.Clear()
-	app.DC.SetFontFace(app.FontTitle)
-	app.DC.SetHexColor(app.CurrentTheme.HeaderTxt)
-	app.DC.DrawStringWrapped("MiyooPod", SCREEN_WIDTH/2, SCREEN_HEIGHT/2-20, 0.5, 0.5, 600, 1.5, gg.AlignCenter)
-	app.DC.SetFontFace(app.FontSmall)
-	app.DC.SetHexColor(app.CurrentTheme.Dim)
-	app.DC.DrawStringWrapped("Loading...", SCREEN_WIDTH/2, SCREEN_HEIGHT/2+30, 0.5, 0.5, 600, 1.5, gg.AlignCenter)
-	app.triggerRefresh()
+	// Draw splash screen with logo
+	app.drawLogoSplash()
+
+	// Generate initial icon PNG with current theme
+	if err := app.generateIconPNG(); err != nil {
+		logMsg(fmt.Sprintf("Failed to generate icon: %v", err))
+	}
 
 	logMsg("MiyooPod init OK!")
 }
@@ -203,8 +201,11 @@ func (app *MiyooPod) handleKey(key Key) {
 	// Global keys (work from any screen)
 	switch key {
 	case START:
-		app.togglePlayPause()
-		app.drawCurrentScreen()
+		// Go to Now Playing screen
+		if app.Playing != nil && app.Playing.Track != nil {
+			app.CurrentScreen = ScreenNowPlaying
+			app.drawCurrentScreen()
+		}
 		return
 	case L:
 		app.prevTrack()
@@ -297,6 +298,32 @@ func audioLoadFile(path string) error {
 	return nil
 }
 
+// audioLoadFileToMemory loads entire audio file into RAM to avoid SD card I/O during playback
+func audioLoadFileToMemory(path string) error {
+	// Read entire file into Go memory
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("failed to read audio file: %v", err)
+	}
+
+	// Allocate C memory and copy data
+	cdata := C.malloc(C.size_t(len(data)))
+	if cdata == nil {
+		return fmt.Errorf("failed to allocate memory for audio")
+	}
+
+	// Copy Go bytes to C memory
+	C.memcpy(cdata, unsafe.Pointer(&data[0]), C.size_t(len(data)))
+
+	// audio_load_mem takes ownership of cdata, will free it on next load or quit
+	if C.audio_load_mem(cdata, C.int(len(data))) != 0 {
+		// audio_load_mem already freed cdata on error
+		return fmt.Errorf("failed to load audio from memory")
+	}
+
+	return nil
+}
+
 func audioPlay() error {
 	if C.audio_play() != 0 {
 		return fmt.Errorf("failed to play audio")
@@ -360,6 +387,10 @@ type AudioStateSnapshot struct {
 	IsPlaying bool
 	IsPaused  bool
 	Finished  bool
+}
+
+func audioFlushBuffers() {
+	C.audio_flush_buffers()
 }
 
 func audioGetState() AudioStateSnapshot {

@@ -136,7 +136,14 @@ func (app *MiyooPod) scanTrack(path string) {
 
 		if pic := m.Picture(); pic != nil {
 			track.HasArt = true
+			logMsg(fmt.Sprintf("[SCAN] Track has art: %s | Size: %d bytes, Type: %s, Ext: %s",
+				filepath.Base(path), len(pic.Data), pic.MIMEType, pic.Ext))
+		} else {
+			logMsg(fmt.Sprintf("[SCAN] Track has NO art: %s | Format: %T",
+				filepath.Base(path), m))
 		}
+	} else {
+		logMsg(fmt.Sprintf("[SCAN] Tag read error: %s | Error: %v", filepath.Base(path), err))
 	}
 
 	// Extract duration using SDL_mixer
@@ -177,19 +184,31 @@ func (app *MiyooPod) scanTrack(path string) {
 	album.Tracks = append(album.Tracks, track)
 
 	// Extract art for album (first track with art wins)
-	if track.HasArt && album.ArtData == nil {
+	if track.HasArt && album.ArtData == nil && album.ArtPath == "" {
+		logMsg(fmt.Sprintf("[EXTRACT] Attempting to extract art for album: %s - %s from %s",
+			album.Artist, album.Name, filepath.Base(track.Path)))
 		f.Seek(0, 0)
 		if m2, err2 := tag.ReadFrom(f); err2 == nil {
 			if pic := m2.Picture(); pic != nil {
 				album.ArtData = pic.Data
 				album.ArtExt = pic.Ext
-				logMsg(fmt.Sprintf("Found album art: %s - %s (size: %d bytes, ext: %s)", album.Artist, album.Name, len(pic.Data), pic.Ext))
+				logMsg(fmt.Sprintf("[EXTRACT] ✓ SUCCESS: %s - %s | Source: %s | Size: %d bytes, Type: %s, Ext: %s",
+					album.Artist, album.Name, filepath.Base(track.Path), len(pic.Data), pic.MIMEType, pic.Ext))
+
+				// Save to disk to avoid re-extraction on next startup
+				if err := app.saveAlbumArtwork(album); err != nil {
+					logMsg(fmt.Sprintf("[EXTRACT] Warning: Failed to save artwork to disk: %v", err))
+				}
 			} else {
-				logMsg(fmt.Sprintf("Track has art flag but no picture data: %s", track.Path))
+				logMsg(fmt.Sprintf("[EXTRACT] ✗ FAILED: Track has art flag but Picture() returned nil: %s | Format: %T",
+					track.Path, m2))
 			}
 		} else {
-			logMsg(fmt.Sprintf("Failed to re-read tag for art extraction: %s - %v", track.Path, err2))
+			logMsg(fmt.Sprintf("[EXTRACT] ✗ FAILED: Re-read tag error: %s | Error: %v", track.Path, err2))
 		}
+	} else if !track.HasArt && album.ArtData == nil && album.ArtPath == "" {
+		logMsg(fmt.Sprintf("[EXTRACT] Skipping %s - track.HasArt=false, album %s - %s has no art yet",
+			filepath.Base(track.Path), album.Artist, album.Name))
 	}
 
 	// Register artist
@@ -213,29 +232,111 @@ func (app *MiyooPod) scanTrack(path string) {
 	}
 }
 
+// fetchMissingAlbumArt fetches album artwork from MusicBrainz for albums without embedded art
+func (app *MiyooPod) fetchMissingAlbumArt() {
+	missingCount := 0
+	fetchedCount := 0
+
+	// Count albums without art
+	for _, album := range app.Library.Albums {
+		if album.ArtData == nil {
+			missingCount++
+		}
+	}
+
+	if missingCount == 0 {
+		logMsg("[MUSICBRAINZ] All albums have artwork, skipping MusicBrainz fetch")
+		return
+	}
+
+	logMsg(fmt.Sprintf("[MUSICBRAINZ] Fetching artwork for %d albums without embedded art...", missingCount))
+
+	for _, album := range app.Library.Albums {
+		if album.ArtData == nil && album.Name != "" && album.Artist != "" {
+			if app.fetchAlbumArtFromMusicBrainz(album) {
+				fetchedCount++
+			}
+		}
+	}
+
+	logMsg(fmt.Sprintf("[MUSICBRAINZ] Fetched artwork for %d/%d albums", fetchedCount, missingCount))
+}
+
 // decodeAlbumArt decodes raw art bytes into images for all albums
+// NOW: Only decode on-demand to save memory and startup time
 func (app *MiyooPod) decodeAlbumArt() {
 	start := time.Now()
 
-	// Pre-cache all 3 sizes to eliminate runtime resize overhead
-	sizes := []int{COVER_CENTER_SIZE, COVER_SIDE_SIZE, COVER_FAR_SIZE}
+	// Pre-cache only the center size (280px) - the only size actually used
+	// COVER_SIDE_SIZE and COVER_FAR_SIZE are unused (coverflow feature not implemented)
+	sizes := []int{COVER_CENTER_SIZE}
+
+	successCount := 0
+	failCount := 0
+	noArtCount := 0
+
+	// OPTIMIZATION: Only decode artwork for albums that will be displayed immediately
+	// to reduce startup time and memory usage. Other artwork will be decoded on-demand.
+	// For now, just decode the first 20 albums to speed up initial menu display.
+	maxPreCache := 20
+	decodedCount := 0
 
 	for i, album := range app.Library.Albums {
+		// Skip pre-caching after first 20 albums to save memory
+		if decodedCount >= maxPreCache {
+			logMsg(fmt.Sprintf("[ART] Skipping pre-cache for remaining %d albums (will decode on-demand)",
+				len(app.Library.Albums)-i))
+			break
+		}
+
 		if album.ArtData == nil {
-			continue
+			// Try loading from disk if path is set
+			if album.ArtPath != "" {
+				if err := app.loadAlbumArtwork(album); err != nil {
+					noArtCount++
+					logMsg(fmt.Sprintf("[ART] Album %d/%d: %s - %s | Failed to load from disk: %v",
+						i+1, len(app.Library.Albums), album.Artist, album.Name, err))
+					continue
+				}
+			} else {
+				noArtCount++
+				logMsg(fmt.Sprintf("[ART] Album %d/%d: %s - %s | No art data available",
+					i+1, len(app.Library.Albums), album.Artist, album.Name))
+				continue
+			}
 		}
 
+		logMsg(fmt.Sprintf("[ART] Album %d/%d: %s - %s | Art data: %d bytes, ext: %s",
+			i+1, len(app.Library.Albums), album.Artist, album.Name, len(album.ArtData), album.ArtExt))
+
+		decodeStart := time.Now()
 		reader := bytes.NewReader(album.ArtData)
-		img, _, err := image.Decode(reader)
+		img, format, err := image.Decode(reader)
 		if err != nil {
-			logMsg(fmt.Sprintf("Failed to decode art for %s: %v", album.Name, err))
+			failCount++
+			logMsg(fmt.Sprintf("[ART] ✗ FAILED to decode: %s - %s | Error: %v | Data size: %d bytes, ext: %s",
+				album.Artist, album.Name, err, len(album.ArtData), album.ArtExt))
+			// Log first few bytes to help diagnose format issues
+			if len(album.ArtData) > 0 {
+				previewLen := 16
+				if len(album.ArtData) < previewLen {
+					previewLen = len(album.ArtData)
+				}
+				logMsg(fmt.Sprintf("[ART]   First %d bytes: %v", previewLen, album.ArtData[:previewLen]))
+			}
 			continue
 		}
+		decodeTime := time.Since(decodeStart)
 
+		successCount++
 		album.ArtImg = img
 
 		// Pre-cache ALL sizes (200px, 140px, 100px) to avoid resize during playback
 		srcBounds := img.Bounds()
+		logMsg(fmt.Sprintf("[ART] ✓ Decoded: %s - %s | Format: %s, Dimensions: %dx%d, Decode time: %v",
+			album.Artist, album.Name, format, srcBounds.Dx(), srcBounds.Dy(), decodeTime))
+
+		cacheStart := time.Now()
 		for _, size := range sizes {
 			key := fmt.Sprintf("%s|%s_%d", album.Artist, album.Name, size)
 			if _, exists := app.Coverflow.CoverCache[key]; !exists {
@@ -247,15 +348,22 @@ func (app *MiyooPod) decodeAlbumArt() {
 				app.Coverflow.CoverCache[key] = dc.Image()
 			}
 		}
+		cacheTime := time.Since(cacheStart)
+		logMsg(fmt.Sprintf("[ART] ✓ Cached for: %s - %s | Cache time: %v",
+			album.Artist, album.Name, cacheTime))
 
-		if i < 5 {
-			logMsg(fmt.Sprintf("Decoded & cached album art %d/%d (all sizes)", i+1, len(app.Library.Albums)))
-		}
+		// Free memory: clear both ArtData and ArtImg after caching
+		// We only need the cached 280px version, not the full decoded image
+		album.ArtData = nil
+		album.ArtImg = nil
+		decodedCount++
 	}
-	logMsg(fmt.Sprintf("decodeAlbumArt loop took: %v", time.Since(start)))
 
-	// Generate default album art and pre-cache at all sizes
-	defaultSizes := []int{COVER_CENTER_SIZE, COVER_SIDE_SIZE, COVER_FAR_SIZE}
+	logMsg(fmt.Sprintf("[ART] Decode summary: %d succeeded, %d failed, %d no art, %d skipped | Total time: %v",
+		successCount, failCount, noArtCount, len(app.Library.Albums)-decodedCount, time.Since(start)))
+
+	// Generate default album art and pre-cache at center size only
+	defaultSizes := []int{COVER_CENTER_SIZE}
 	for _, size := range defaultSizes {
 		dc := gg.NewContext(size, size)
 		dc.SetHexColor("#333333")
@@ -390,6 +498,18 @@ func (app *MiyooPod) loadLibraryJSON() error {
 
 	// Re-extract album art for ALL albums (ArtData is not saved in JSON)
 	for _, album := range lib.Albums {
+		// First, try to load from saved artwork file
+		if album.ArtPath != "" {
+			if err := app.loadAlbumArtwork(album); err == nil {
+				logMsg(fmt.Sprintf("Loaded saved artwork for: %s - %s (%s)", album.Artist, album.Name, album.ArtPath))
+				continue // Successfully loaded from disk, skip extraction
+			} else {
+				logMsg(fmt.Sprintf("Failed to load saved artwork: %s - %s (%v)", album.Artist, album.Name, err))
+				// Fall through to try extracting from MP3
+			}
+		}
+
+		// Extract from MP3 files
 		logMsg(fmt.Sprintf("Extracting art for album: %s - %s (%d tracks)", album.Artist, album.Name, len(album.Tracks)))
 		// Try ALL tracks in this album to find art (don't rely on has_art flag)
 		for i, track := range album.Tracks {
@@ -398,7 +518,13 @@ func (app *MiyooPod) loadLibraryJSON() error {
 					if pic := m.Picture(); pic != nil {
 						album.ArtData = pic.Data
 						album.ArtExt = pic.Ext
-						logMsg(fmt.Sprintf("  ✓ Found art in track %d: %s (size: %d bytes, ext: %s)", i+1, filepath.Base(track.Path), len(pic.Data), pic.Ext))
+						logMsg(fmt.Sprintf("  ✓ Found art in track %d: %s (size: %d bytes, ext: %s, type: %s)", i+1, filepath.Base(track.Path), len(pic.Data), pic.Ext, pic.MIMEType))
+
+						// Save to disk to avoid re-extraction next time
+						if err := app.saveAlbumArtwork(album); err != nil {
+							logMsg(fmt.Sprintf("  Warning: Failed to save artwork to disk: %v", err))
+						}
+
 						// Update the track's has_art flag if we found art
 						if !track.HasArt {
 							track.HasArt = true
@@ -406,7 +532,7 @@ func (app *MiyooPod) loadLibraryJSON() error {
 						f.Close()
 						break // Got art for this album, move to next album
 					} else {
-						logMsg(fmt.Sprintf("  - Track %d: %s - no picture data", i+1, filepath.Base(track.Path)))
+						logMsg(fmt.Sprintf("  - Track %d: %s - no picture data | Tag format: %T, FileType: %s", i+1, filepath.Base(track.Path), m, m.FileType()))
 					}
 				} else {
 					logMsg(fmt.Sprintf("  - Track %d: %s - tag read error: %v", i+1, filepath.Base(track.Path), err))
