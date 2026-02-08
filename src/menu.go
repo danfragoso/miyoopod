@@ -334,13 +334,19 @@ func (app *MiyooPod) handleMenuKey(key Key) {
 	case UP:
 		if current.SelIndex > 0 {
 			current.SelIndex--
-			current.adjustScroll()
+		} else if len(current.Items) > 0 {
+			// Wrap to bottom
+			current.SelIndex = len(current.Items) - 1
 		}
+		current.adjustScroll()
 	case DOWN:
 		if current.SelIndex < len(current.Items)-1 {
 			current.SelIndex++
-			current.adjustScroll()
+		} else if len(current.Items) > 0 {
+			// Wrap to top
+			current.SelIndex = 0
 		}
+		current.adjustScroll()
 	case RIGHT, A:
 		if len(current.Items) == 0 {
 			return
@@ -636,8 +642,19 @@ func (app *MiyooPod) refreshRootMenu() {
 		for i, item := range app.RootMenu.Items {
 			if item.Label == "Now Playing" {
 				app.RootMenu.Items = append(app.RootMenu.Items[:i], app.RootMenu.Items[i+1:]...)
-				if app.RootMenu.SelIndex > 0 {
+				// Adjust selection to prevent going negative
+				if app.RootMenu.SelIndex > i {
 					app.RootMenu.SelIndex--
+				} else if app.RootMenu.SelIndex == i {
+					// If Now Playing was selected, move to first item
+					app.RootMenu.SelIndex = 0
+				}
+				// Ensure selection is valid
+				if app.RootMenu.SelIndex < 0 {
+					app.RootMenu.SelIndex = 0
+				}
+				if app.RootMenu.SelIndex >= len(app.RootMenu.Items) {
+					app.RootMenu.SelIndex = len(app.RootMenu.Items) - 1
 				}
 				break
 			}

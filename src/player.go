@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"math/rand"
+	"time"
 )
 
 // playTrackFromList starts playing a track from a list, building a queue from the context
@@ -18,6 +19,9 @@ func (app *MiyooPod) playTrackFromList(tracks []*Track, startIdx int) {
 
 	if app.Queue.Shuffle {
 		app.buildShuffleOrder(startIdx)
+	} else {
+		// Clear old shuffle order when playing without shuffle
+		app.Queue.ShuffleOrder = nil
 	}
 
 	app.playCurrentQueueTrack()
@@ -58,13 +62,31 @@ func (app *MiyooPod) playCurrentQueueTrack() {
 	app.Playing.Track = track
 	app.Playing.State = StatePlaying
 	app.Playing.Position = 0
-	app.Playing.Duration = track.Duration
+	// Use track duration if available, otherwise will be updated by poller
+	if track.Duration > 0 {
+		app.Playing.Duration = track.Duration
+	} else {
+		app.Playing.Duration = 0
+	}
 
 	err := app.mpvLoadFile(track.Path)
 	if err != nil {
 		logMsg(fmt.Sprintf("Failed to load: %v", err))
 		app.Playing.State = StateStopped
+		app.Playing.Track = nil // Clear track on failure
 		app.showError(fmt.Sprintf("Failed to load audio\n%s", err.Error()))
+		return
+	}
+
+	// Verify playback actually started
+	time.Sleep(100 * time.Millisecond)
+	state := audioGetState()
+	if !state.IsPlaying && !state.IsPaused {
+		logMsg("Audio failed to start playing")
+		app.Playing.State = StateStopped
+		app.Playing.Track = nil
+		app.showError("Playback failed to start")
+		return
 	}
 
 	app.updateCoverflowForCurrentTrack()
@@ -103,12 +125,18 @@ func (app *MiyooPod) nextTrack() {
 		return
 	}
 
+	// Determine the max index based on shuffle state
+	maxIdx := len(app.Queue.Tracks) - 1
+	if app.Queue.Shuffle && len(app.Queue.ShuffleOrder) > 0 {
+		maxIdx = len(app.Queue.ShuffleOrder) - 1
+	}
+
 	app.Queue.CurrentIndex++
-	if app.Queue.CurrentIndex >= len(app.Queue.Tracks) {
+	if app.Queue.CurrentIndex > maxIdx {
 		if app.Queue.Repeat == RepeatAll {
 			app.Queue.CurrentIndex = 0
 		} else {
-			app.Queue.CurrentIndex = len(app.Queue.Tracks) - 1
+			app.Queue.CurrentIndex = maxIdx
 			app.mpvStop()
 			app.Playing.State = StateStopped
 			return
@@ -125,13 +153,20 @@ func (app *MiyooPod) prevTrack() {
 
 	if app.Playing != nil && app.Playing.Position > 3.0 {
 		app.mpvSeek(-app.Playing.Position)
+		app.NPCacheDirty = true // Force UI update when restarting track
 		return
+	}
+
+	// Determine the max index based on shuffle state
+	maxIdx := len(app.Queue.Tracks) - 1
+	if app.Queue.Shuffle && len(app.Queue.ShuffleOrder) > 0 {
+		maxIdx = len(app.Queue.ShuffleOrder) - 1
 	}
 
 	app.Queue.CurrentIndex--
 	if app.Queue.CurrentIndex < 0 {
 		if app.Queue.Repeat == RepeatAll {
-			app.Queue.CurrentIndex = len(app.Queue.Tracks) - 1
+			app.Queue.CurrentIndex = maxIdx
 		} else {
 			app.Queue.CurrentIndex = 0
 		}
@@ -151,13 +186,19 @@ func (app *MiyooPod) handleTrackEnd() {
 		return
 	}
 
+	// Determine the max index based on shuffle state
+	maxIdx := len(app.Queue.Tracks) - 1
+	if app.Queue.Shuffle && len(app.Queue.ShuffleOrder) > 0 {
+		maxIdx = len(app.Queue.ShuffleOrder) - 1
+	}
+
 	app.Queue.CurrentIndex++
-	if app.Queue.CurrentIndex >= len(app.Queue.Tracks) {
+	if app.Queue.CurrentIndex > maxIdx {
 		if app.Queue.Repeat == RepeatAll {
 			app.Queue.CurrentIndex = 0
 			app.playCurrentQueueTrack()
 		} else {
-			app.Queue.CurrentIndex = len(app.Queue.Tracks) - 1
+			app.Queue.CurrentIndex = maxIdx
 			app.Playing.State = StateStopped
 			app.NPCacheDirty = true
 			app.refreshRootMenu()
@@ -171,12 +212,40 @@ func (app *MiyooPod) handleTrackEnd() {
 }
 
 func (app *MiyooPod) toggleShuffle() {
-	if app.Queue == nil {
+	if app.Queue == nil || len(app.Queue.Tracks) == 0 {
 		return
 	}
+
+	// Remember which track is currently playing
+	currentTrack := app.getCurrentTrack()
+	var currentPhysicalIdx int = -1
+	if currentTrack != nil {
+		for i, track := range app.Queue.Tracks {
+			if track == currentTrack {
+				currentPhysicalIdx = i
+				break
+			}
+		}
+	}
+
 	app.Queue.Shuffle = !app.Queue.Shuffle
-	if app.Queue.Shuffle && len(app.Queue.Tracks) > 0 {
-		app.buildShuffleOrder(app.Queue.CurrentIndex)
+	if app.Queue.Shuffle {
+		// Build shuffle order with current track's physical index
+		if currentPhysicalIdx >= 0 {
+			app.buildShuffleOrder(currentPhysicalIdx)
+		} else {
+			app.buildShuffleOrder(0)
+		}
+		// Reset playback position to start of new shuffle order
+		app.Queue.CurrentIndex = 0
+		logMsg("Shuffle enabled")
+	} else {
+		// When turning off shuffle, set CurrentIndex to physical position
+		if currentPhysicalIdx >= 0 {
+			app.Queue.CurrentIndex = currentPhysicalIdx
+		}
+		app.Queue.ShuffleOrder = nil
+		logMsg("Shuffle disabled")
 	}
 	app.NPCacheDirty = true
 }
@@ -278,6 +347,11 @@ func (app *MiyooPod) drawNowPlayingScreen() {
 // Only updates progress bar region, bypasses gg entirely.
 func (app *MiyooPod) updateProgressBarOnly() {
 	if app.Playing == nil || app.NowPlayingBG == nil {
+		return
+	}
+
+	// Double-check we're still on Now Playing screen
+	if app.CurrentScreen != ScreenNowPlaying {
 		return
 	}
 

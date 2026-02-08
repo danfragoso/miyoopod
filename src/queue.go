@@ -63,10 +63,20 @@ func (app *MiyooPod) drawQueueScreen() {
 
 	// Draw tracks
 	y := MENU_TOP_Y
-	for i := app.QueueScrollOffset; i < totalTracks && i < app.QueueScrollOffset+visibleItems; i++ {
-		track := app.Queue.Tracks[i]
-		isSelected := (i == app.QueueSelectedIndex)
-		isPlaying := (i == app.Queue.CurrentIndex)
+	for displayIdx := app.QueueScrollOffset; displayIdx < totalTracks && displayIdx < app.QueueScrollOffset+visibleItems; displayIdx++ {
+		// Get actual track index (respecting shuffle order)
+		trackIdx := displayIdx
+		if app.Queue.Shuffle && len(app.Queue.ShuffleOrder) > 0 && displayIdx < len(app.Queue.ShuffleOrder) {
+			trackIdx = app.Queue.ShuffleOrder[displayIdx]
+		}
+
+		if trackIdx >= len(app.Queue.Tracks) {
+			continue
+		}
+
+		track := app.Queue.Tracks[trackIdx]
+		isSelected := (displayIdx == app.QueueSelectedIndex)
+		isPlaying := (displayIdx == app.Queue.CurrentIndex)
 
 		// Highlight selected track
 		if isSelected {
@@ -88,7 +98,7 @@ func (app *MiyooPod) drawQueueScreen() {
 		if isPlaying {
 			prefix = "▶ "
 		}
-		label := fmt.Sprintf("%s%d. %s", prefix, i+1, track.Title)
+		label := fmt.Sprintf("%s%d. %s", prefix, displayIdx+1, track.Title)
 		maxWidth := float64(SCREEN_WIDTH - MENU_LEFT_PAD - MENU_RIGHT_PAD - 40)
 		displayLabel := app.truncateText(label, maxWidth, app.FontMenu)
 		textY := float64(y) + float64(MENU_ITEM_HEIGHT)/2
@@ -127,25 +137,33 @@ func (app *MiyooPod) handleQueueKey(key Key) {
 	case UP:
 		if app.QueueSelectedIndex > 0 {
 			app.QueueSelectedIndex--
-			app.drawCurrentScreen()
+		} else if totalTracks > 0 {
+			// Wrap to bottom
+			app.QueueSelectedIndex = totalTracks - 1
 		}
+		app.drawCurrentScreen()
 	case DOWN:
 		if app.QueueSelectedIndex < totalTracks-1 {
 			app.QueueSelectedIndex++
-			app.drawCurrentScreen()
+		} else if totalTracks > 0 {
+			// Wrap to top
+			app.QueueSelectedIndex = 0
 		}
+		app.drawCurrentScreen()
 	case B, LEFT:
 		app.CurrentScreen = ScreenNowPlaying
 		app.drawCurrentScreen()
 	case A:
 		// Jump to selected track and play it
+		// QueueSelectedIndex is the display/playback position
 		app.Queue.CurrentIndex = app.QueueSelectedIndex
 		app.playCurrentQueueTrack()
 		app.CurrentScreen = ScreenNowPlaying
 		app.drawCurrentScreen()
 	case X:
 		// Remove selected track
-		app.removeFromQueue(app.QueueSelectedIndex)
+		// In shuffle mode, we need to remove from the playback position
+		app.removeFromQueueAtPlaybackPosition(app.QueueSelectedIndex)
 	case MENU:
 		// Clear queue
 		app.clearQueue()
@@ -170,7 +188,93 @@ func (app *MiyooPod) clearQueue() {
 	app.drawCurrentScreen()
 }
 
-// removeFromQueue removes a track at the specified index
+// removeFromQueueAtPlaybackPosition removes a track at the given playback position
+// (respecting shuffle order if active)
+func (app *MiyooPod) removeFromQueueAtPlaybackPosition(playbackPos int) {
+	if app.Queue == nil || playbackPos < 0 {
+		return
+	}
+
+	// Get the physical index of the track to remove
+	physicalIdx := playbackPos
+	if app.Queue.Shuffle && len(app.Queue.ShuffleOrder) > 0 {
+		if playbackPos >= len(app.Queue.ShuffleOrder) {
+			return
+		}
+		physicalIdx = app.Queue.ShuffleOrder[playbackPos]
+	}
+
+	if physicalIdx < 0 || physicalIdx >= len(app.Queue.Tracks) {
+		return
+	}
+
+	// Don't remove if it's the only track and it's playing
+	if len(app.Queue.Tracks) == 1 {
+		app.clearQueue()
+		return
+	}
+
+	// Remove the track from physical array
+	app.Queue.Tracks = append(app.Queue.Tracks[:physicalIdx], app.Queue.Tracks[physicalIdx+1:]...)
+
+	// Adjust shuffle order if active
+	if app.Queue.Shuffle && len(app.Queue.ShuffleOrder) > 0 {
+		newShuffleOrder := make([]int, 0, len(app.Queue.ShuffleOrder)-1)
+		for i, shuffleIdx := range app.Queue.ShuffleOrder {
+			if i == playbackPos {
+				// Skip this playback position (the track we're removing)
+				continue
+			}
+			// Adjust physical indices after the removed track
+			if shuffleIdx > physicalIdx {
+				newShuffleOrder = append(newShuffleOrder, shuffleIdx-1)
+			} else if shuffleIdx < physicalIdx {
+				newShuffleOrder = append(newShuffleOrder, shuffleIdx)
+			}
+			// Note: shuffleIdx == physicalIdx case is handled by i == playbackPos check
+		}
+		app.Queue.ShuffleOrder = newShuffleOrder
+	}
+
+	// Adjust current playback position
+	if playbackPos < app.Queue.CurrentIndex {
+		app.Queue.CurrentIndex--
+	} else if playbackPos == app.Queue.CurrentIndex {
+		// Removed the currently playing track
+		// Clear the Playing.Track pointer to avoid stale reference
+		if app.Playing != nil {
+			app.Playing.Track = nil
+		}
+		maxIdx := len(app.Queue.Tracks) - 1
+		if app.Queue.Shuffle && len(app.Queue.ShuffleOrder) > 0 {
+			maxIdx = len(app.Queue.ShuffleOrder) - 1
+		}
+		if app.Queue.CurrentIndex > maxIdx {
+			app.Queue.CurrentIndex = maxIdx
+		}
+		// Play the next track in the queue
+		if len(app.Queue.Tracks) > 0 {
+			app.playCurrentQueueTrack()
+		}
+	}
+
+	// Adjust selected index
+	maxIdx := len(app.Queue.Tracks) - 1
+	if app.Queue.Shuffle && len(app.Queue.ShuffleOrder) > 0 {
+		maxIdx = len(app.Queue.ShuffleOrder) - 1
+	}
+	if app.QueueSelectedIndex > maxIdx {
+		app.QueueSelectedIndex = maxIdx
+	}
+	if app.QueueSelectedIndex < 0 && maxIdx >= 0 {
+		app.QueueSelectedIndex = 0
+	}
+
+	app.NPCacheDirty = true
+	app.drawCurrentScreen()
+}
+
+// removeFromQueue removes a track at the specified physical index
 func (app *MiyooPod) removeFromQueue(idx int) {
 	if app.Queue == nil || idx < 0 || idx >= len(app.Queue.Tracks) {
 		return
@@ -185,6 +289,24 @@ func (app *MiyooPod) removeFromQueue(idx int) {
 	// Remove the track
 	app.Queue.Tracks = append(app.Queue.Tracks[:idx], app.Queue.Tracks[idx+1:]...)
 
+	// Adjust shuffle order if active (preserve existing shuffle sequence)
+	if app.Queue.Shuffle && len(app.Queue.ShuffleOrder) > 0 {
+		newShuffleOrder := make([]int, 0, len(app.Queue.ShuffleOrder))
+		for _, shuffleIdx := range app.Queue.ShuffleOrder {
+			if shuffleIdx == idx {
+				// Skip the removed track
+				continue
+			} else if shuffleIdx > idx {
+				// Adjust indices after the removed track
+				newShuffleOrder = append(newShuffleOrder, shuffleIdx-1)
+			} else {
+				// Keep indices before the removed track
+				newShuffleOrder = append(newShuffleOrder, shuffleIdx)
+			}
+		}
+		app.Queue.ShuffleOrder = newShuffleOrder
+	}
+
 	// Adjust current index if needed
 	if idx < app.Queue.CurrentIndex {
 		app.Queue.CurrentIndex--
@@ -197,11 +319,6 @@ func (app *MiyooPod) removeFromQueue(idx int) {
 		if len(app.Queue.Tracks) > 0 {
 			app.playCurrentQueueTrack()
 		}
-	}
-
-	// Rebuild shuffle order if needed
-	if app.Queue.Shuffle {
-		app.buildShuffleOrder(app.Queue.CurrentIndex)
 	}
 
 	// Adjust selected index
@@ -231,24 +348,83 @@ func (app *MiyooPod) addToQueue(track *Track) {
 		return
 	}
 
-	app.Queue.Tracks = append(app.Queue.Tracks, track)
-
-	// Rebuild shuffle order if needed
-	if app.Queue.Shuffle {
-		app.buildShuffleOrder(app.Queue.CurrentIndex)
+	// Check if track is already in queue
+	if app.isTrackInQueue(track) {
+		logMsg(fmt.Sprintf("Track already in queue: %s", track.Title))
+		return
 	}
+
+	// Insert after current track (iPod-like behavior)
+	insertPos := app.Queue.CurrentIndex + 1
+	if insertPos > len(app.Queue.Tracks) {
+		insertPos = len(app.Queue.Tracks)
+	}
+
+	// Insert the track
+	app.Queue.Tracks = append(app.Queue.Tracks[:insertPos],
+		append([]*Track{track}, app.Queue.Tracks[insertPos:]...)...)
+
+	// If shuffle is on, extend the shuffle order without regenerating
+	if app.Queue.Shuffle && len(app.Queue.ShuffleOrder) > 0 {
+		// First, adjust existing shuffle indices that are >= insertPos
+		// (all tracks shifted right by the insertion)
+		for i := range app.Queue.ShuffleOrder {
+			if app.Queue.ShuffleOrder[i] >= insertPos {
+				app.Queue.ShuffleOrder[i]++
+			}
+		}
+
+		// Then append the new track index to the end of shuffle order
+		// This preserves the existing shuffle sequence
+		app.Queue.ShuffleOrder = append(app.Queue.ShuffleOrder, insertPos)
+	}
+
+	logMsg(fmt.Sprintf("Added to queue: %s - %s", track.Artist, track.Title))
 }
 
 // addTracksToQueue appends multiple tracks to the queue
 func (app *MiyooPod) addTracksToQueue(tracks []*Track) {
-	if app.Queue == nil {
+	if app.Queue == nil || len(tracks) == 0 {
 		return
 	}
 
-	app.Queue.Tracks = append(app.Queue.Tracks, tracks...)
-
-	// Rebuild shuffle order if needed
-	if app.Queue.Shuffle {
-		app.buildShuffleOrder(app.Queue.CurrentIndex)
+	// If queue is empty, initialize with these tracks
+	if len(app.Queue.Tracks) == 0 {
+		app.Queue.Tracks = make([]*Track, len(tracks))
+		copy(app.Queue.Tracks, tracks)
+		app.Queue.CurrentIndex = 0
+		if app.Queue.Shuffle {
+			app.buildShuffleOrder(0)
+		}
+		return
 	}
+
+	// Insert after current track
+	insertPos := app.Queue.CurrentIndex + 1
+	if insertPos > len(app.Queue.Tracks) {
+		insertPos = len(app.Queue.Tracks)
+	}
+
+	// Insert the tracks
+	app.Queue.Tracks = append(app.Queue.Tracks[:insertPos],
+		append(tracks, app.Queue.Tracks[insertPos:]...)...)
+
+	// If shuffle is on, extend the shuffle order without regenerating
+	if app.Queue.Shuffle && len(app.Queue.ShuffleOrder) > 0 {
+		numNewTracks := len(tracks)
+
+		// Adjust existing shuffle indices that are >= insertPos
+		for i := range app.Queue.ShuffleOrder {
+			if app.Queue.ShuffleOrder[i] >= insertPos {
+				app.Queue.ShuffleOrder[i] += numNewTracks
+			}
+		}
+
+		// Append new track indices to the end of shuffle order
+		for i := 0; i < numNewTracks; i++ {
+			app.Queue.ShuffleOrder = append(app.Queue.ShuffleOrder, insertPos+i)
+		}
+	}
+
+	logMsg(fmt.Sprintf("Added %d tracks to queue", len(tracks)))
 }

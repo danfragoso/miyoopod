@@ -73,9 +73,15 @@ func (app *MiyooPod) mpvStop() {
 }
 
 func (app *MiyooPod) mpvSeek(seconds float64) {
+	if app.Playing == nil {
+		return
+	}
 	newPos := app.Playing.Position + seconds
 	if newPos < 0 {
 		newPos = 0
+	}
+	if newPos > app.Playing.Duration && app.Playing.Duration > 0 {
+		newPos = app.Playing.Duration
 	}
 	audioSeek(newPos)
 }
