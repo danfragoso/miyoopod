@@ -8,6 +8,7 @@ import (
 const LOG_PATH = "./miyoopod.log"
 
 var logFile *os.File
+var globalApp *MiyooPod // Global reference for checking WriteLogsEnabled
 
 func init() {
 	var err error
@@ -18,5 +19,8 @@ func init() {
 }
 
 func logMsg(message string) {
+	if globalApp != nil && !globalApp.WriteLogsEnabled {
+		return
+	}
 	logFile.WriteString(time.Now().Format("2006-01-02 15:04:05.999") + " - " + message + "\n")
 }

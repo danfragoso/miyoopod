@@ -584,7 +584,7 @@ func (app *MiyooPod) drawStatusBar() {
 		app.drawButtonLegend(12, centerY, "B", "Back")
 		app.drawButtonLegend(100, centerY, "A", "Play")
 		app.drawButtonLegend(200, centerY, "X", "Remove")
-		app.drawButtonLegend(320, centerY, "MENU", "Clear All")
+		app.drawButtonLegend(320, centerY, "SELECT", "Clear All")
 	}
 
 	// Right side: now playing mini status (only on menu screen)

@@ -10,7 +10,7 @@ import (
 
 // App metadata
 const (
-	APP_VERSION = "1.0.0"
+	APP_VERSION = "0.0.1"
 	APP_AUTHOR  = "Danilo Fragoso"
 	DONATE_URL  = "https://github.com/danfragoso/miyoopod"
 )
@@ -440,9 +440,6 @@ type Library struct {
 	Artists   []*Artist   `json:"artists"`
 	Playlists []*Playlist `json:"playlists"`
 
-	SavedTheme   string `json:"saved_theme,omitempty"`    // Theme name to restore on startup
-	SavedLockKey string `json:"saved_lock_key,omitempty"` // Lock key name to restore on startup
-
 	TracksByPath  map[string]*Track  `json:"-"` // Reconstructed on load
 	AlbumsByKey   map[string]*Album  `json:"-"` // Reconstructed on load
 	ArtistsByName map[string]*Artist `json:"-"` // Reconstructed on load
@@ -578,4 +575,7 @@ type MiyooPod struct {
 	// Album art status callback
 	albumArtStatusFunc func(string)
 	QueueSelectedIndex int // Selected track in queue view
+
+	// Settings
+	WriteLogsEnabled bool // Whether to write logs to file
 }

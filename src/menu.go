@@ -274,6 +274,18 @@ func (app *MiyooPod) buildSettingsMenuItems(root *MenuScreen) []*MenuItem {
 		},
 	})
 
+	// Write Logs option
+	logStatus := "Off"
+	if app.WriteLogsEnabled {
+		logStatus = "On"
+	}
+	items = append(items, &MenuItem{
+		Label: "Write Logs: " + logStatus,
+		Action: func() {
+			app.toggleWriteLogs()
+		},
+	})
+
 	return items
 }
 
@@ -747,8 +759,8 @@ func (app *MiyooPod) cycleLockKey() {
 
 	app.drawCurrentScreen()
 
-	// Save lock key preference to library
-	if err := app.saveLibraryJSON(); err != nil {
+	// Save lock key preference to settings file (fast)
+	if err := app.saveSettings(); err != nil {
 		logMsg(fmt.Sprintf("Failed to save lock key preference: %v", err))
 	}
 }

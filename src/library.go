@@ -148,6 +148,9 @@ func (app *MiyooPod) scanTrack(path string) {
 
 	// Extract duration using SDL_mixer
 	track.Duration = audioGetDurationForFile(path)
+	if track.Duration == 0 {
+		logMsg(fmt.Sprintf("[SCAN] Warning: Could not extract duration for: %s", filepath.Base(path)))
+	}
 
 	// Fallback: use filename as title
 	if track.Title == "" {
@@ -435,10 +438,6 @@ func (app *MiyooPod) saveLibraryJSON() error {
 	logMsg("Saving library to JSON...")
 	start := time.Now()
 
-	// Save current theme and lock key settings
-	app.Library.SavedTheme = app.CurrentTheme.Name
-	app.Library.SavedLockKey = app.getLockKeyName()
-
 	data, err := json.MarshalIndent(app.Library, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal library: %v", err)
@@ -587,36 +586,6 @@ func (app *MiyooPod) loadLibraryJSON() error {
 
 	// Decode album art
 	app.decodeAlbumArt()
-
-	// Restore saved theme if available
-	if lib.SavedTheme != "" {
-		for _, theme := range AllThemes() {
-			if theme.Name == lib.SavedTheme {
-				app.setTheme(theme)
-				logMsg(fmt.Sprintf("Restored theme: %s", lib.SavedTheme))
-				break
-			}
-		}
-	}
-
-	// Restore saved lock key if available
-	if lib.SavedLockKey != "" {
-		switch lib.SavedLockKey {
-		case "Y":
-			app.LockKey = Y
-		case "X":
-			app.LockKey = X
-		case "SELECT":
-			app.LockKey = SELECT
-		case "MENU":
-			app.LockKey = MENU
-		case "L2":
-			app.LockKey = L2
-		case "R2":
-			app.LockKey = R2
-		}
-		logMsg(fmt.Sprintf("Restored lock key: %s", lib.SavedLockKey))
-	}
 
 	logMsg(fmt.Sprintf("Library loaded from JSON: %d tracks, %d albums, %d artists, %d playlists in %v",
 		len(lib.Tracks), len(lib.Albums), len(lib.Artists), len(lib.Playlists), time.Since(start)))

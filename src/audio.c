@@ -144,10 +144,16 @@ double audio_get_duration() {
 double audio_get_file_duration(const char *path) {
     Mix_Music *temp_music = Mix_LoadMUS(path);
     if (!temp_music) {
+        fprintf(stderr, "Failed to load music for duration: %s - Error: %s\n", path, Mix_GetError());
         return 0.0;
     }
     
     double duration = Mix_MusicDuration(temp_music);
+    if (duration < 0) {
+        fprintf(stderr, "Mix_MusicDuration failed for: %s - Error: %s\n", path, Mix_GetError());
+        duration = 0.0;
+    }
+    
     Mix_FreeMusic(temp_music);
     
     return duration;

@@ -28,6 +28,12 @@ func init() {
 }
 
 func (app *MiyooPod) Init() {
+	// Set global reference for logger
+	globalApp = app
+
+	// Default: logs enabled
+	app.WriteLogsEnabled = true
+
 	logMsg("Initializing MiyooPod...")
 	logMsg("SDL init...")
 	if C.init() != 0 {
@@ -72,8 +78,20 @@ func (app *MiyooPod) Init() {
 	// Set initial volume (scale 0-100 to 0-128)
 	audioSetVolume(int(app.Playing.Volume))
 
-	// Draw splash screen with logo
+	// Load settings (theme and lock key) before showing splash - fast parse
+	if err := app.loadSettings(); err != nil {
+		logMsg(fmt.Sprintf("Could not load settings: %v (using defaults)", err))
+	}
+
+	// Draw splash screen with logo (now using restored theme if available)
 	app.drawLogoSplash()
+
+	// Check for updates in background
+	versionStatus := app.checkVersion()
+	app.drawLogoSplashWithVersion(versionStatus)
+
+	// Give user time to see version status
+	time.Sleep(1500 * time.Millisecond)
 
 	// Generate initial icon PNG with current theme
 	if err := app.generateIconPNG(); err != nil {
@@ -136,7 +154,7 @@ func main() {
 	go app.RunUI()
 	time.Sleep(1 * time.Second)
 
-	// Try to load library from JSON, fall back to scanning if it fails
+	// Load library from JSON or perform full scan
 	err := app.loadLibraryJSON()
 	if err != nil {
 		logMsg(fmt.Sprintf("Could not load library from JSON: %v", err))

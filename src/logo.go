@@ -147,3 +147,38 @@ func (app *MiyooPod) drawLogoSplash() {
 
 	app.triggerRefresh()
 }
+
+// drawLogoSplashWithVersion draws the splash screen with version status
+func (app *MiyooPod) drawLogoSplashWithVersion(versionStatus string) {
+	// Clear with theme background
+	app.DC.SetHexColor(app.CurrentTheme.BG)
+	app.DC.Clear()
+
+	// Draw the logo in the upper portion
+	logoScale := 0.6 // Scale down to ~150px width
+	app.drawLogo(SCREEN_WIDTH/2, SCREEN_HEIGHT/2-60, logoScale, false)
+
+	// Draw "MiyooPod" title below the logo
+	app.DC.SetFontFace(app.FontTitle)
+	app.DC.SetHexColor(app.CurrentTheme.HeaderTxt)
+	app.DC.DrawStringWrapped("MiyooPod", SCREEN_WIDTH/2, SCREEN_HEIGHT/2+100, 0.5, 0.5, 600, 1.5, gg.AlignCenter)
+
+	// Draw "Loading..." text
+	app.DC.SetFontFace(app.FontSmall)
+	app.DC.SetHexColor(app.CurrentTheme.Dim)
+	app.DC.DrawStringWrapped("Loading...", SCREEN_WIDTH/2, SCREEN_HEIGHT/2+140, 0.5, 0.5, 600, 1.5, gg.AlignCenter)
+
+	// Draw version status below Loading
+	app.DC.SetFontFace(app.FontSmall)
+	if versionStatus == "Up to date" {
+		app.DC.SetHexColor(app.CurrentTheme.Accent)
+	} else if versionStatus == "Failed to fetch version" {
+		app.DC.SetHexColor(app.CurrentTheme.Dim)
+	} else {
+		// New update available
+		app.DC.SetHexColor(app.CurrentTheme.Accent)
+	}
+	app.DC.DrawStringWrapped(versionStatus, SCREEN_WIDTH/2, SCREEN_HEIGHT/2+165, 0.5, 0.5, 600, 1.5, gg.AlignCenter)
+
+	app.triggerRefresh()
+}

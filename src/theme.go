@@ -13,8 +13,8 @@ func (app *MiyooPod) setTheme(theme Theme) {
 		logMsg(fmt.Sprintf("Failed to generate themed icon: %v", err))
 	}
 
-	// Save theme preference to library
-	if err := app.saveLibraryJSON(); err != nil {
+	// Save theme preference to settings file (fast)
+	if err := app.saveSettings(); err != nil {
 		logMsg(fmt.Sprintf("Failed to save theme preference: %v", err))
 	}
 }

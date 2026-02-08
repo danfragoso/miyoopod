@@ -164,10 +164,53 @@ func (app *MiyooPod) handleQueueKey(key Key) {
 		// Remove selected track
 		// In shuffle mode, we need to remove from the playback position
 		app.removeFromQueueAtPlaybackPosition(app.QueueSelectedIndex)
-	case MENU:
-		// Clear queue
-		app.clearQueue()
+	case SELECT:
+		// Clear all except currently playing track
+		app.clearQueueExceptCurrent()
 	}
+}
+
+// clearQueueExceptCurrent removes all tracks except the currently playing one
+func (app *MiyooPod) clearQueueExceptCurrent() {
+	if app.Queue == nil || len(app.Queue.Tracks) == 0 {
+		return
+	}
+
+	// If nothing is playing or queue is already empty, just clear everything
+	if app.Playing == nil || app.Playing.State == StateStopped || app.Queue.CurrentIndex < 0 {
+		app.clearQueue()
+		return
+	}
+
+	// Get the currently playing track
+	var currentTrack *Track
+	if app.Queue.Shuffle && len(app.Queue.ShuffleOrder) > 0 {
+		if app.Queue.CurrentIndex < len(app.Queue.ShuffleOrder) {
+			physicalIdx := app.Queue.ShuffleOrder[app.Queue.CurrentIndex]
+			if physicalIdx < len(app.Queue.Tracks) {
+				currentTrack = app.Queue.Tracks[physicalIdx]
+			}
+		}
+	} else {
+		if app.Queue.CurrentIndex < len(app.Queue.Tracks) {
+			currentTrack = app.Queue.Tracks[app.Queue.CurrentIndex]
+		}
+	}
+
+	if currentTrack == nil {
+		app.clearQueue()
+		return
+	}
+
+	// Keep only the current track
+	app.Queue.Tracks = []*Track{currentTrack}
+	app.Queue.CurrentIndex = 0
+	app.Queue.ShuffleOrder = nil
+	app.Queue.Shuffle = false // Disable shuffle since only one track remains
+	app.QueueSelectedIndex = 0
+	app.QueueScrollOffset = 0
+	app.NPCacheDirty = true
+	app.drawCurrentScreen()
 }
 
 // clearQueue removes all tracks from the queue and stops playback
