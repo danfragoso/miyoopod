@@ -38,7 +38,7 @@ func (app *MiyooPod) showAboutScreen() {
 	dc.DrawStringAnchored("Inspired by classic music players", SCREEN_WIDTH/2, float64(yPos), 0.5, 0.5)
 
 	// Generate QR code
-	qr, err := qrcode.New(DONATE_URL, qrcode.Medium)
+	qr, err := qrcode.New(SUPPORT_URL, qrcode.Medium)
 	if err == nil {
 		qrSize := 150
 		qrImg := qr.Image(qrSize)

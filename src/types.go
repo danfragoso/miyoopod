@@ -12,7 +12,7 @@ import (
 const (
 	APP_VERSION = "0.0.1"
 	APP_AUTHOR  = "Danilo Fragoso"
-	DONATE_URL  = "https://github.com/danfragoso/miyoopod"
+	SUPPORT_URL = "https://github.com/danfragoso/miyoopod"
 )
 
 // Display constants - identical to GaugeBoy
