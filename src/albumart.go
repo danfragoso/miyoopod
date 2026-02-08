@@ -75,7 +75,7 @@ func (app *MiyooPod) showAlbumArtProgress(album *Album, current, total int, stat
 	dc.Clear()
 
 	// Header
-	app.drawHeader("Scan Album Art")
+	app.drawHeader("Fetch Album Art")
 
 	// Progress text
 	dc.SetFontFace(app.FontMenu)
@@ -211,7 +211,7 @@ func (app *MiyooPod) showAlbumArtResult(title string, fetched, failed, total int
 	dc.Clear()
 
 	// Header
-	app.drawHeader("Scan Album Art")
+	app.drawHeader("Fetch Album Art")
 
 	yPos := SCREEN_HEIGHT/2 - 80
 

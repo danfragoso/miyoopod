@@ -262,6 +262,22 @@ func (app *MiyooPod) fetchMissingAlbumArt() {
 	logMsg(fmt.Sprintf("[MUSICBRAINZ] Fetched artwork for %d/%d albums", fetchedCount, missingCount))
 }
 
+// decodeArtwork decodes raw artwork bytes into an image
+func (app *MiyooPod) decodeArtwork(artData []byte, artExt string) image.Image {
+	if len(artData) == 0 {
+		return nil
+	}
+
+	reader := bytes.NewReader(artData)
+	img, _, err := image.Decode(reader)
+	if err != nil {
+		logMsg(fmt.Sprintf("Failed to decode artwork: %v", err))
+		return nil
+	}
+
+	return img
+}
+
 // decodeAlbumArt decodes raw art bytes into images for all albums
 // NOW: Only decode on-demand to save memory and startup time
 func (app *MiyooPod) decodeAlbumArt() {

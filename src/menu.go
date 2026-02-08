@@ -120,9 +120,9 @@ func (app *MiyooPod) buildRootMenu() *MenuScreen {
 		},
 	})
 
-	// Scan Album Art
+	// Fetch Album Art
 	items = append(items, &MenuItem{
-		Label: "Scan Album Art",
+		Label: "Fetch Album Art",
 		Action: func() {
 			app.scanAlbumArt()
 		},
@@ -194,6 +194,7 @@ func (app *MiyooPod) buildArtistMenuItems(root *MenuScreen) []*MenuItem {
 			Label:      a.Name,
 			HasSubmenu: true,
 			Submenu:    albumMenu,
+			Artist:     a, // Store artist reference for Y-key action
 		})
 	}
 	return items
@@ -374,13 +375,25 @@ func (app *MiyooPod) handleMenuKey(key Key) {
 			return
 		}
 	case Y:
-		// Add track to queue
+		// Add to queue: track, album, or all artist tracks
 		if len(current.Items) == 0 {
 			return
 		}
 		item := current.Items[current.SelIndex]
 		if item.Track != nil {
 			app.addToQueue(item.Track)
+		} else if item.Album != nil {
+			// Add all album tracks
+			for _, track := range item.Album.Tracks {
+				app.addToQueue(track)
+			}
+		} else if item.Artist != nil {
+			// Add all tracks from all albums by this artist
+			for _, album := range item.Artist.Albums {
+				for _, track := range album.Tracks {
+					app.addToQueue(track)
+				}
+			}
 		}
 	}
 

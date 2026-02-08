@@ -180,6 +180,202 @@ func (app *MiyooPod) drawPauseIcon(x, y, size int) {
 	dc.Fill()
 }
 
+// drawNextIcon draws a next track icon (>>)
+func (app *MiyooPod) drawNextIcon(x, y, size int) {
+	dc := app.DC
+	fx := float64(x)
+	fy := float64(y)
+	fs := float64(size)
+
+	// First triangle
+	dc.MoveTo(fx, fy)
+	dc.LineTo(fx+fs*0.4, fy+fs/2)
+	dc.LineTo(fx, fy+fs)
+	dc.ClosePath()
+	dc.Fill()
+
+	// Second triangle
+	dc.MoveTo(fx+fs*0.5, fy)
+	dc.LineTo(fx+fs*0.9, fy+fs/2)
+	dc.LineTo(fx+fs*0.5, fy+fs)
+	dc.ClosePath()
+	dc.Fill()
+}
+
+// drawPrevIcon draws a previous track icon (<<)
+func (app *MiyooPod) drawPrevIcon(x, y, size int) {
+	dc := app.DC
+	fx := float64(x)
+	fy := float64(y)
+	fs := float64(size)
+
+	// First triangle (pointing left)
+	dc.MoveTo(fx+fs*0.4, fy)
+	dc.LineTo(fx, fy+fs/2)
+	dc.LineTo(fx+fs*0.4, fy+fs)
+	dc.ClosePath()
+	dc.Fill()
+
+	// Second triangle (pointing left)
+	dc.MoveTo(fx+fs*0.9, fy)
+	dc.LineTo(fx+fs*0.5, fy+fs/2)
+	dc.LineTo(fx+fs*0.9, fy+fs)
+	dc.ClosePath()
+	dc.Fill()
+}
+
+// drawShuffleIcon draws a shuffle icon (crossed curved arrows)
+func (app *MiyooPod) drawShuffleIcon(x, y, size int) {
+	dc := app.DC
+	fx := float64(x)
+	fy := float64(y)
+	fs := float64(size)
+
+	// Scale factor from 24x24 SVG viewBox
+	scale := fs / 24.0
+
+	dc.SetLineWidth(2)
+
+	// Top curved path (left to right upper)
+	dc.MoveTo(fx+3*scale, fy+6*scale)
+	dc.CubicTo(
+		fx+6*scale, fy+6*scale,
+		fx+8*scale, fy+3*scale,
+		fx+12*scale, fy+6*scale,
+	)
+	dc.CubicTo(
+		fx+15*scale, fy+8.5*scale,
+		fx+16*scale, fy+6*scale,
+		fx+18*scale, fy+6*scale,
+	)
+	dc.Stroke()
+
+	// Top arrow head (pointing right and down)
+	dc.MoveTo(fx+18*scale, fy+3*scale)
+	dc.LineTo(fx+21*scale, fy+6*scale)
+	dc.LineTo(fx+18*scale, fy+9*scale)
+	dc.Stroke()
+
+	// Bottom curved path (left to right lower, crossing)
+	dc.MoveTo(fx+3*scale, fy+18*scale)
+	dc.CubicTo(
+		fx+6*scale, fy+18*scale,
+		fx+8*scale, fy+21*scale,
+		fx+12*scale, fy+18*scale,
+	)
+	dc.CubicTo(
+		fx+15*scale, fy+15.5*scale,
+		fx+16*scale, fy+18*scale,
+		fx+18*scale, fy+18*scale,
+	)
+	dc.Stroke()
+
+	// Bottom arrow head (pointing right and up)
+	dc.MoveTo(fx+18*scale, fy+15*scale)
+	dc.LineTo(fx+21*scale, fy+18*scale)
+	dc.LineTo(fx+18*scale, fy+21*scale)
+	dc.Stroke()
+}
+
+// drawRepeatIcon draws a repeat icon (rounded rectangle loop)
+func (app *MiyooPod) drawRepeatIcon(x, y, size int) {
+	dc := app.DC
+	fx := float64(x)
+	fy := float64(y)
+	fs := float64(size)
+
+	// Scale factor from 24x24 SVG viewBox
+	scale := fs / 24.0
+
+	dc.SetLineWidth(2)
+
+	// Top path (right to left with rounded corners)
+	dc.MoveTo(fx+14*scale, fy+5*scale)
+	dc.LineTo(fx+6.8*scale, fy+5*scale)
+	dc.CubicTo(
+		fx+5*scale, fy+5*scale,
+		fx+2*scale, fy+7*scale,
+		fx+2*scale, fy+9.8*scale,
+	)
+	dc.LineTo(fx+2*scale, fy+15.5*scale)
+	dc.Stroke()
+
+	// Top arrow head (pointing up and left)
+	dc.MoveTo(fx+11*scale, fy+2*scale)
+	dc.LineTo(fx+14*scale, fy+5*scale)
+	dc.LineTo(fx+11*scale, fy+8*scale)
+	dc.Stroke()
+
+	// Bottom path (left to right with rounded corners)
+	dc.MoveTo(fx+10*scale, fy+19*scale)
+	dc.LineTo(fx+17.2*scale, fy+19*scale)
+	dc.CubicTo(
+		fx+19*scale, fy+19*scale,
+		fx+22*scale, fy+17*scale,
+		fx+22*scale, fy+14.2*scale,
+	)
+	dc.LineTo(fx+22*scale, fy+8.5*scale)
+	dc.Stroke()
+
+	// Bottom arrow head (pointing down and right)
+	dc.MoveTo(fx+10*scale, fy+16*scale)
+	dc.LineTo(fx+13*scale, fy+19*scale)
+	dc.LineTo(fx+10*scale, fy+22*scale)
+	dc.Stroke()
+}
+
+// drawRepeatOneIcon draws a repeat one icon (rounded rectangle loop with vertical bar)
+func (app *MiyooPod) drawRepeatOneIcon(x, y, size int) {
+	dc := app.DC
+	fx := float64(x)
+	fy := float64(y)
+	fs := float64(size)
+
+	// Scale factor from 24x24 SVG viewBox
+	scale := fs / 24.0
+
+	dc.SetLineWidth(2)
+
+	// Top path (right to left with rounded corners)
+	dc.MoveTo(fx+14*scale, fy+5*scale)
+	dc.LineTo(fx+6.8*scale, fy+5*scale)
+	dc.CubicTo(
+		fx+5*scale, fy+5*scale,
+		fx+2*scale, fy+7*scale,
+		fx+2*scale, fy+9.8*scale,
+	)
+	dc.LineTo(fx+2*scale, fy+15.5*scale)
+	dc.Stroke()
+
+	// Top arrow head (pointing up and left)
+	dc.MoveTo(fx+11*scale, fy+2*scale)
+	dc.LineTo(fx+14*scale, fy+5*scale)
+	dc.LineTo(fx+11*scale, fy+8*scale)
+	dc.Stroke()
+
+	// Bottom path (left to right with rounded corners)
+	dc.MoveTo(fx+10*scale, fy+19*scale)
+	dc.LineTo(fx+17.2*scale, fy+19*scale)
+	dc.CubicTo(
+		fx+19*scale, fy+19*scale,
+		fx+22*scale, fy+17*scale,
+		fx+22*scale, fy+14.2*scale,
+	)
+	dc.LineTo(fx+22*scale, fy+8.5*scale)
+	dc.Stroke()
+
+	// Bottom arrow head (pointing down and right)
+	dc.MoveTo(fx+10*scale, fy+16*scale)
+	dc.LineTo(fx+13*scale, fy+19*scale)
+	dc.LineTo(fx+10*scale, fy+22*scale)
+	dc.Stroke()
+
+	// Draw vertical bar in center
+	dc.SetLineWidth(2.5)
+	dc.DrawLine(fx+12*scale, fy+9*scale, fx+12*scale, fy+15*scale)
+	dc.Stroke()
+}
+
 // measureTextCached measures text width with caching to avoid expensive font operations
 func (app *MiyooPod) measureTextCached(text string, face font.Face) float64 {
 	// Cache key uses text + font ID (zero-allocation for cache hits)
@@ -295,47 +491,47 @@ func (app *MiyooPod) drawCenteredText(text string, y float64, face font.Face, co
 
 func (app *MiyooPod) drawStatusIndicators(y int) {
 	dc := app.DC
-	dc.SetFontFace(app.FontSmall)
 
 	// All controls aligned to the right side (starting at x: 330 to match track info)
 	rightX := 330
 
-	// Shuffle indicator
+	// Shuffle icon
 	if app.Queue != nil && app.Queue.Shuffle {
 		dc.SetHexColor(app.CurrentTheme.Accent)
 	} else {
 		dc.SetHexColor(app.CurrentTheme.Dim)
 	}
-	dc.DrawString("SHF", float64(rightX), float64(y))
+	app.drawShuffleIcon(rightX, y-10, 20)
 
 	// Previous button
 	dc.SetHexColor(app.CurrentTheme.ItemTxt)
-	dc.DrawString("<<", float64(rightX+60), float64(y))
+	app.drawPrevIcon(rightX+50, y-10, 20)
 
 	// Play/Pause in center
 	if app.Playing != nil && app.Playing.State == StatePlaying {
 		dc.SetHexColor(app.CurrentTheme.Accent)
-		app.drawPauseIcon(rightX+110, y-10, 20)
+		app.drawPauseIcon(rightX+100, y-10, 20)
 	} else {
 		dc.SetHexColor(app.CurrentTheme.Accent)
-		app.drawPlayIcon(rightX+110, y-10, 20)
+		app.drawPlayIcon(rightX+100, y-10, 20)
 	}
 
 	// Next button
 	dc.SetHexColor(app.CurrentTheme.ItemTxt)
-	dc.DrawString(">>", float64(rightX+150), float64(y))
+	app.drawNextIcon(rightX+140, y-10, 20)
 
-	// Repeat indicator
-	repeatText := "RPs"
-	if app.Queue != nil && app.Queue.Repeat == RepeatOne {
-		repeatText = "RP1"
-	}
+	// Repeat icon
 	if app.Queue != nil && app.Queue.Repeat != RepeatOff {
 		dc.SetHexColor(app.CurrentTheme.Accent)
 	} else {
 		dc.SetHexColor(app.CurrentTheme.Dim)
 	}
-	dc.DrawString(repeatText, float64(rightX+210), float64(y))
+
+	if app.Queue != nil && app.Queue.Repeat == RepeatOne {
+		app.drawRepeatOneIcon(rightX+190, y-10, 20)
+	} else {
+		app.drawRepeatIcon(rightX+190, y-10, 20)
+	}
 }
 
 // drawStatusBar draws a permanent status bar at the bottom of the screen
@@ -365,13 +561,17 @@ func (app *MiyooPod) drawStatusBar() {
 		if app.Playing != nil && app.Playing.State != StateStopped {
 			app.drawButtonLegend(235, centerY, "START", "Now Playing")
 		}
-		// Only show "Add to Queue" if we're viewing a track list and not playing
+		// Show "Add to Queue" if viewing tracks, albums, or artists
 		if len(app.MenuStack) > 0 {
 			current := app.MenuStack[len(app.MenuStack)-1]
-			if len(current.Items) > 0 && current.Items[0].Track != nil {
-				// Only show if nothing is playing to avoid overlap
-				if app.Playing == nil || app.Playing.State == StateStopped {
-					app.drawButtonLegend(360, centerY, "Y", "Add to Q")
+			if len(current.Items) > 0 {
+				firstItem := current.Items[0]
+				// Show Y hint for tracks, albums, or artists
+				if firstItem.Track != nil || firstItem.Album != nil || firstItem.Artist != nil {
+					// Only show if nothing is playing to avoid overlap
+					if app.Playing == nil || app.Playing.State == StateStopped {
+						app.drawButtonLegend(360, centerY, "Y", "Add to Q")
+					}
 				}
 			}
 		}
@@ -614,44 +814,19 @@ func (app *MiyooPod) drawLockOverlay() {
 	dc.DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
 	dc.Fill()
 
-	// Lock icon (padlock)
+	// "LOCKED" text
 	centerX := SCREEN_WIDTH / 2.0
 	centerY := SCREEN_HEIGHT / 2.0
-	lockSize := 80.0
 
-	// Padlock shackle (top arc)
-	dc.SetHexColor("#FFFFFF")
-	dc.SetLineWidth(8)
-	dc.DrawArc(centerX, centerY-10, lockSize/2.5, 3.14159, 0) // π to 0 = top half circle
-	dc.Stroke()
-
-	// Padlock body (rectangle with rounded corners)
-	bodyWidth := lockSize
-	bodyHeight := lockSize * 0.8
-	bodyY := centerY - 5
-
-	dc.SetHexColor("#FFFFFF")
-	dc.DrawRoundedRectangle(centerX-bodyWidth/2, bodyY, bodyWidth, bodyHeight, 8)
-	dc.Fill()
-
-	// Keyhole (circle + rectangle)
-	dc.SetHexColor("#000000")
-	keyholeY := bodyY + bodyHeight/3
-	dc.DrawCircle(centerX, keyholeY, 8)
-	dc.Fill()
-	dc.DrawRectangle(centerX-3, keyholeY, 6, 20)
-	dc.Fill()
-
-	// "LOCKED" text
 	dc.SetFontFace(app.FontTitle)
 	dc.SetHexColor("#FFFFFF")
-	dc.DrawStringAnchored("LOCKED", centerX, centerY+bodyHeight+20, 0.5, 0)
+	dc.DrawStringAnchored("LOCKED", centerX, centerY-15, 0.5, 0.5)
 
 	// Hint text
 	dc.SetFontFace(app.FontSmall)
 	dc.SetHexColor("#CCCCCC")
 	lockKeyName := app.getLockKeyName()
-	dc.DrawStringAnchored(fmt.Sprintf("Double-press %s to unlock", lockKeyName), centerX, centerY+bodyHeight+50, 0.5, 0)
+	dc.DrawStringAnchored(fmt.Sprintf("Double-press %s to unlock", lockKeyName), centerX, centerY+15, 0.5, 0.5)
 }
 
 // getBrightness reads the current PWM duty_cycle (brightness level)

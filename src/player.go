@@ -118,6 +118,7 @@ func (app *MiyooPod) togglePlayPause() {
 	}
 	app.mpvTogglePause()
 	app.NPCacheDirty = true
+	app.drawCurrentScreen()
 }
 
 func (app *MiyooPod) nextTrack() {

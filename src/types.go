@@ -11,7 +11,7 @@ import (
 // App metadata
 const (
 	APP_VERSION = "1.0.0"
-	APP_AUTHOR  = "Dan Fragoso"
+	APP_AUTHOR  = "Danilo Fragoso"
 	DONATE_URL  = "https://github.com/danfragoso/miyoopod"
 )
 
@@ -474,7 +474,8 @@ type MenuItem struct {
 	Action     func()
 	Submenu    *MenuScreen
 	Track      *Track
-	Album      *Album // For album preview display
+	Album      *Album  // For album preview display
+	Artist     *Artist // For artist track queuing
 }
 
 type MenuScreen struct {
@@ -554,13 +555,6 @@ type MiyooPod struct {
 
 	// Pre-rendered digit sprites for fast time display (bypass gg)
 	Digits *DigitSprites
-
-	// FPS tracking (debug only, toggled with Y button)
-	FrameCount   int
-	FPSStartTime time.Time
-	CurrentFPS   float64
-	ShowFPS      bool
-	FPSFontFace  font.Face
 
 	// Key repeat state
 	LastKeyTime time.Time

@@ -24,9 +24,11 @@ func (app *MiyooPod) startPlaybackPoller() {
 			if state.IsPaused && app.Playing.State != StatePaused {
 				app.Playing.State = StatePaused
 				app.NPCacheDirty = true
+				app.drawCurrentScreen()
 			} else if state.IsPlaying && app.Playing.State != StatePlaying {
 				app.Playing.State = StatePlaying
 				app.NPCacheDirty = true
+				app.drawCurrentScreen()
 			}
 
 			if state.Finished {

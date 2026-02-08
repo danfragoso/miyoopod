@@ -98,7 +98,6 @@ func (app *MiyooPod) loadFonts() {
 	app.FontAlbum, _ = gg.LoadFontFace(fontPath, FONT_SIZE_ALBUM)
 	app.FontTime, _ = gg.LoadFontFace(fontPath, FONT_SIZE_TIME)
 	app.FontSmall, _ = gg.LoadFontFace(fontPath, FONT_SIZE_SMALL)
-	app.FPSFontFace, _ = gg.LoadFontFace(fontPath, 20)
 }
 
 func (app *MiyooPod) RunUI() {
@@ -251,10 +250,6 @@ func (app *MiyooPod) handleNowPlayingKey(key Key) {
 		// Cycle repeat mode
 		app.cycleRepeat()
 		app.drawCurrentScreen()
-	case Y:
-		// Toggle FPS display
-		app.ShowFPS = !app.ShowFPS
-		app.drawCurrentScreen()
 	}
 }
 
@@ -279,7 +274,6 @@ func (app *MiyooPod) drawCurrentScreen() {
 	// Draw error popup overlay if active
 	app.drawErrorPopup()
 
-	app.DrawFPS()
 	app.triggerRefresh()
 }
 
