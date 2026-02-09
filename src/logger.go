@@ -1,5 +1,9 @@
 package main
 
+/*
+#include <stdlib.h>
+*/
+import "C"
 import (
 	"fmt"
 	"os"
@@ -20,26 +24,23 @@ func init() {
 	}
 }
 
-// logMsg writes to local log file and automatically captures errors/warnings to Sentry.
-// No need to call CaptureError/CaptureWarning separately - just use logMsg with "ERROR", "WARNING", or "FATAL" in the message.
+// logMsg writes to local log file and automatically captures errors/warnings to PostHog.
+// Local logs and developer logs are independent:
+//   - LocalLogsEnabled controls writing to miyoopod.log file
+//   - SentryEnabled controls sending to PostHog for observability
+//
 // Examples:
 //
-//	logMsg("ERROR: Failed to load track") -> automatically sent to Sentry as error
-//	logMsg("WARNING: Low battery") -> automatically sent to Sentry as warning
-//	logMsg("INFO: Playback started") -> only written to local log
+//	logMsg("ERROR: Failed to load track") -> sent to PostHog as error (if enabled), written to file (if enabled)
+//	logMsg("WARNING: Low battery") -> sent to PostHog as warning (if enabled), written to file (if enabled)
+//	logMsg("INFO: Playback started") -> sent to PostHog as info (if enabled), written to file (if enabled)
 func logMsg(message string) {
 	// Write to local log file if enabled
-	if globalApp != nil && !globalApp.LocalLogsEnabled {
-		// Still capture errors to Sentry even if local logs are off
-		if strings.Contains(strings.ToUpper(message), "ERROR") || strings.Contains(strings.ToUpper(message), "FATAL") {
-			CaptureError(message, nil)
-		}
-		return
+	if globalApp != nil && globalApp.LocalLogsEnabled {
+		logFile.WriteString(time.Now().Format("2006-01-02 15:04:05.999") + " - " + message + "\n")
 	}
 
-	logFile.WriteString(time.Now().Format("2006-01-02 15:04:05.999") + " - " + message + "\n")
-
-	// Also send to Sentry with structured attributes
+	// Capture to PostHog independently (if developer logs enabled)
 	attrs := extractLogAttributes(message)
 	if strings.Contains(strings.ToUpper(message), "ERROR") || strings.Contains(strings.ToUpper(message), "FATAL") {
 		CaptureError(message, attrs)
@@ -98,4 +99,36 @@ func extractLogAttributes(message string) map[string]interface{} {
 	}
 
 	return attrs
+}
+
+//export GoLogMsg
+func GoLogMsg(cMsg *C.char) {
+	msg := C.GoString(cMsg)
+	logMsg(msg)
+}
+
+//export DetectDevice
+func DetectDevice(width, height C.int) {
+	if globalApp == nil {
+		return
+	}
+
+	w := int(width)
+	h := int(height)
+
+	globalApp.DisplayWidth = w
+	globalApp.DisplayHeight = h
+
+	// Determine device model based on resolution
+	if w == 640 && h == 480 {
+		globalApp.DeviceModel = "miyoo-mini-plus"
+	} else if w == 750 && h == 560 {
+		// Both v4 and flip have the same resolution
+		// We'll label them as v4 by default, could be either
+		globalApp.DeviceModel = "miyoo-mini-v4"
+	} else {
+		globalApp.DeviceModel = fmt.Sprintf("unknown-%dx%d", w, h)
+	}
+
+	logMsg(fmt.Sprintf("INFO: Device detected: %s (%dx%d)", globalApp.DeviceModel, w, h))
 }

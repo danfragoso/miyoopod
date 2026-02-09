@@ -10,7 +10,7 @@ import (
 
 // App metadata
 const (
-	APP_VERSION = "0.0.2"
+	APP_VERSION = "0.0.3"
 	APP_AUTHOR  = "Danilo Fragoso"
 	SUPPORT_URL = "https://github.com/danfragoso/miyoopod"
 )
@@ -606,4 +606,9 @@ type MiyooPod struct {
 	InstallationID   string // Unique ID for this installation
 	LocalLogsEnabled bool   // Whether to write logs to file
 	SentryEnabled    bool   // Whether to send events to Sentry
+
+	// Device info (detected at startup)
+	DeviceModel   string // e.g., "miyoo-mini-plus", "miyoo-mini-v4", "miyoo-mini-flip"
+	DisplayWidth  int    // Detected display width
+	DisplayHeight int    // Detected display height
 }

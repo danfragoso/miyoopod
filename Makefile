@@ -22,7 +22,9 @@ package:
 	fi; \
 	echo "Updating version to $$VERSION..."; \
 	go run scripts/update-version.go $$VERSION; \
+	echo "Building app..."; \
 	go run scripts/build-inject.go; \
+	CC=arm-linux-gnueabihf-gcc CGO_ENABLED=1 GOARCH=arm GOOS=linux go build -o App/MiyooPod/MiyooPod src/*.go; \
 	echo "Creating release directory..."; \
 	mkdir -p releases; \
 	echo "Packaging release..."; \

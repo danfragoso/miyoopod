@@ -7,6 +7,10 @@
 #include <linux/fb.h>
 #include <SDL.h>
 
+// Forward declarations for Go functions
+extern void GoLogMsg(char* msg);
+extern void DetectDevice(int width, int height);
+
 const int RENDER_WIDTH = 640;
 const int RENDER_HEIGHT = 480;
 
@@ -17,40 +21,26 @@ static SDL_Window *window = NULL;
 static SDL_Renderer *renderer = NULL;
 static SDL_Texture *texture = NULL;
 
-static FILE *clog = NULL;
-
 void c_log(const char *msg) {
-    if (!clog) {
-        clog = fopen("./miyoopod.log", "a");
-    }
-    if (clog) {
-        fprintf(clog, "[C] %s\n", msg);
-        fflush(clog);
-    }
+    char buffer[512];
+    snprintf(buffer, sizeof(buffer), "[C] INFO: %s", msg);
+    GoLogMsg(buffer);
 }
 
 void c_logf(const char *fmt, const char *detail) {
-    if (!clog) {
-        clog = fopen("./miyoopod.log", "a");
-    }
-    if (clog) {
-        fprintf(clog, "[C] ");
-        fprintf(clog, fmt, detail);
-        fprintf(clog, "\n");
-        fflush(clog);
-    }
+    char buffer[512];
+    snprintf(buffer, sizeof(buffer), "[C] INFO: ");
+    int offset = strlen(buffer);
+    snprintf(buffer + offset, sizeof(buffer) - offset, fmt, detail);
+    GoLogMsg(buffer);
 }
 
 void c_logd(const char *fmt, int val) {
-    if (!clog) {
-        clog = fopen("./miyoopod.log", "a");
-    }
-    if (clog) {
-        fprintf(clog, "[C] ");
-        fprintf(clog, fmt, val);
-        fprintf(clog, "\n");
-        fflush(clog);
-    }
+    char buffer[512];
+    snprintf(buffer, sizeof(buffer), "[C] INFO: ");
+    int offset = strlen(buffer);
+    snprintf(buffer + offset, sizeof(buffer) - offset, fmt, val);
+    GoLogMsg(buffer);
 }
 
 int pollEvents() {
@@ -92,16 +82,21 @@ int init() {
             display_height = vinfo.yres;
             c_logd("Detected FB resolution width: %d", display_width);
             c_logd("Detected FB resolution height: %d", display_height);
+            
+            // Notify Go about detected device
+            DetectDevice(display_width, display_height);
         } else {
             c_log("Could not get FB info, using default 640x480");
             display_width = 640;
             display_height = 480;
+            DetectDevice(display_width, display_height);
         }
         close(fb_fd);
     } else {
         c_log("Could not open /dev/fb0, using default 640x480");
         display_width = 640;
         display_height = 480;
+        DetectDevice(display_width, display_height);
     }
 
     c_log("Creating window...");
@@ -146,7 +141,4 @@ void quit() {
         SDL_DestroyWindow(window);
     }
     SDL_Quit();
-    if (clog) {
-        fclose(clog);
-    }
 }

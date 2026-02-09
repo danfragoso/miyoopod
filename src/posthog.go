@@ -169,10 +169,17 @@ func sendOTLPLog(level, message string, extra map[string]interface{}) error {
 	})
 
 	// Build resource attributes
+	deviceModel := "miyoo-mini-plus" // Default
+	if globalApp.DeviceModel != "" {
+		deviceModel = globalApp.DeviceModel
+	}
+
 	resourceAttrs := []OTLPKeyValue{
 		{Key: "service.name", Value: map[string]interface{}{"stringValue": "miyoopod"}},
 		{Key: "service.version", Value: map[string]interface{}{"stringValue": APP_VERSION}},
-		{Key: "device.model", Value: map[string]interface{}{"stringValue": "miyoo-mini-plus"}},
+		{Key: "device.model", Value: map[string]interface{}{"stringValue": deviceModel}},
+		{Key: "display.width", Value: map[string]interface{}{"intValue": globalApp.DisplayWidth}},
+		{Key: "display.height", Value: map[string]interface{}{"intValue": globalApp.DisplayHeight}},
 	}
 
 	// Build log record (omit timestamp - let PostHog use ingestion time due to device's 1970 clock)
@@ -258,13 +265,20 @@ func sendErrorToPostHog(level, message string, extra map[string]interface{}) err
 	}
 
 	// Build event properties
+	deviceModel := "miyoo-mini-plus" // Default
+	if globalApp.DeviceModel != "" {
+		deviceModel = globalApp.DeviceModel
+	}
+
 	properties := map[string]interface{}{
 		"distinct_id":        globalApp.InstallationID,
 		"$exception_list":    exceptionList,
 		"$exception_message": message,
 		"$exception_level":   level,
 		"version":            APP_VERSION,
-		"device":             "miyoo-mini-plus",
+		"device":             deviceModel,
+		"display_width":      globalApp.DisplayWidth,
+		"display_height":     globalApp.DisplayHeight,
 	}
 
 	// Add extra attributes
@@ -342,9 +356,16 @@ func trackEvent(eventName string, properties map[string]interface{}) error {
 	}
 
 	// Add standard properties
+	deviceModel := "miyoo-mini-plus" // Default
+	if globalApp.DeviceModel != "" {
+		deviceModel = globalApp.DeviceModel
+	}
+
 	properties["distinct_id"] = globalApp.InstallationID
 	properties["version"] = APP_VERSION
-	properties["device"] = "miyoo-mini-plus"
+	properties["device"] = deviceModel
+	properties["display_width"] = globalApp.DisplayWidth
+	properties["display_height"] = globalApp.DisplayHeight
 
 	// Build PostHog event
 	event := map[string]interface{}{

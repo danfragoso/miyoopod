@@ -109,6 +109,13 @@ The build process uses CGO to compile Go source with C bindings and bundles all 
 
 ## Changelog
 
+### Version 0.0.3
+- 🔧 Fixed PostHog logging initialization order
+- 📊 C logs from SDL initialization now properly captured
+- 📱 Device model detection and reporting (Mini Plus, Mini v4, Mini Flip)
+- 📏 Display resolution metrics sent to analytics
+- 🔀 Independent local logs and developer logs settings
+
 ### Version 0.0.2
 - ✨ Added support for Miyoo Mini v4 (750×560 resolution)
 - ✨ Added support for Miyoo Mini Flip (750×560 resolution)

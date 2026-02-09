@@ -35,6 +35,9 @@ func (app *MiyooPod) Init() {
 	app.LocalLogsEnabled = false
 	app.SentryEnabled = true // Default: developer logs enabled
 
+	// Initialize PostHog client early so C logs during SDL init are captured
+	app.initSentry()
+
 	logMsg("Initializing MiyooPod...")
 	logMsg("SDL init...")
 	if C.init() != 0 {
@@ -83,9 +86,6 @@ func (app *MiyooPod) Init() {
 	if err := app.loadSettings(); err != nil {
 		logMsg(fmt.Sprintf("WARNING: Could not load settings: %v (using defaults)", err))
 	}
-
-	// Initialize Sentry client
-	app.initSentry()
 
 	// Draw splash screen with logo (now using restored theme if available)
 	app.drawLogoSplash()
