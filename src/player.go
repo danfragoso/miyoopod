@@ -26,7 +26,7 @@ func (app *MiyooPod) playTrackFromList(tracks []*Track, startIdx int) {
 
 	app.playCurrentQueueTrack()
 
-	app.CurrentScreen = ScreenNowPlaying
+	app.setScreen(ScreenNowPlaying)
 	app.refreshRootMenu()
 	app.drawCurrentScreen()
 }
@@ -45,7 +45,7 @@ func (app *MiyooPod) shuffleAllAndPlay() {
 
 	app.playCurrentQueueTrack()
 
-	app.CurrentScreen = ScreenNowPlaying
+	app.setScreen(ScreenNowPlaying)
 	app.refreshRootMenu()
 	app.drawCurrentScreen()
 }
@@ -57,7 +57,8 @@ func (app *MiyooPod) playCurrentQueueTrack() {
 		return
 	}
 
-	logMsg(fmt.Sprintf("Playing: %s - %s", track.Artist, track.Title))
+	// Track song play for analytics
+	TrackSongPlayed(track)
 
 	app.Playing.Track = track
 	app.Playing.State = StatePlaying
@@ -239,14 +240,16 @@ func (app *MiyooPod) toggleShuffle() {
 		}
 		// Reset playback position to start of new shuffle order
 		app.Queue.CurrentIndex = 0
-		logMsg("Shuffle enabled")
+		logMsg("INFO: Shuffle enabled")
+		TrackAction("shuffle_enabled", nil)
 	} else {
 		// When turning off shuffle, set CurrentIndex to physical position
 		if currentPhysicalIdx >= 0 {
 			app.Queue.CurrentIndex = currentPhysicalIdx
 		}
 		app.Queue.ShuffleOrder = nil
-		logMsg("Shuffle disabled")
+		logMsg("INFO: Shuffle disabled")
+		TrackAction("shuffle_disabled", nil)
 	}
 	app.NPCacheDirty = true
 }
@@ -258,10 +261,13 @@ func (app *MiyooPod) cycleRepeat() {
 	switch app.Queue.Repeat {
 	case RepeatOff:
 		app.Queue.Repeat = RepeatAll
+		TrackAction("repeat_mode_changed", map[string]interface{}{"repeat_mode": "all"})
 	case RepeatAll:
 		app.Queue.Repeat = RepeatOne
+		TrackAction("repeat_mode_changed", map[string]interface{}{"repeat_mode": "one"})
 	case RepeatOne:
 		app.Queue.Repeat = RepeatOff
+		TrackAction("repeat_mode_changed", map[string]interface{}{"repeat_mode": "off"})
 	}
 	app.NPCacheDirty = true
 }

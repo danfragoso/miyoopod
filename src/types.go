@@ -10,7 +10,7 @@ import (
 
 // App metadata
 const (
-	APP_VERSION = "0.0.1"
+	APP_VERSION = "0.0.2"
 	APP_AUTHOR  = "Danilo Fragoso"
 	SUPPORT_URL = "https://github.com/danfragoso/miyoopod"
 )
@@ -396,6 +396,19 @@ const (
 	RepeatOne
 )
 
+func (r RepeatMode) String() string {
+	switch r {
+	case RepeatOff:
+		return "off"
+	case RepeatAll:
+		return "all"
+	case RepeatOne:
+		return "one"
+	default:
+		return "unknown"
+	}
+}
+
 // --- Music Library types ---
 
 type Track struct {
@@ -464,6 +477,19 @@ const (
 	ScreenNowPlaying
 	ScreenQueue
 )
+
+func (s ScreenType) String() string {
+	switch s {
+	case ScreenMenu:
+		return "menu"
+	case ScreenNowPlaying:
+		return "now_playing"
+	case ScreenQueue:
+		return "queue"
+	default:
+		return "unknown"
+	}
+}
 
 type MenuItem struct {
 	Label      string
@@ -577,5 +603,7 @@ type MiyooPod struct {
 	QueueSelectedIndex int // Selected track in queue view
 
 	// Settings
-	WriteLogsEnabled bool // Whether to write logs to file
+	InstallationID   string // Unique ID for this installation
+	LocalLogsEnabled bool   // Whether to write logs to file
+	SentryEnabled    bool   // Whether to send events to Sentry
 }

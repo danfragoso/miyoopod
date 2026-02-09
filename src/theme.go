@@ -8,6 +8,9 @@ func (app *MiyooPod) setTheme(theme Theme) {
 	app.NPCacheDirty = true // Force Now Playing screen to re-render
 	app.drawCurrentScreen()
 
+	// Track theme change
+	TrackAction("theme_changed", map[string]interface{}{"theme_name": theme.Name})
+
 	// Generate icon PNG with new theme colors
 	if err := app.generateIconPNG(); err != nil {
 		logMsg(fmt.Sprintf("Failed to generate themed icon: %v", err))

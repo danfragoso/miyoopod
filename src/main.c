@@ -1,10 +1,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <linux/fb.h>
 #include <SDL.h>
 
-const int SCREEN_WIDTH = 640;
-const int SCREEN_HEIGHT = 480;
+const int RENDER_WIDTH = 640;
+const int RENDER_HEIGHT = 480;
+
+static int display_width = 640;
+static int display_height = 480;
 
 static SDL_Window *window = NULL;
 static SDL_Renderer *renderer = NULL;
@@ -59,8 +66,9 @@ int pollEvents() {
 int refreshScreenPtr(unsigned char *pixels) {
     if (!texture) return -1;
 
-    SDL_UpdateTexture(texture, NULL, pixels, SCREEN_WIDTH * 4);
+    SDL_UpdateTexture(texture, NULL, pixels, RENDER_WIDTH * 4);
     SDL_RenderClear(renderer);
+    // Scale the 640x480 texture to fit the actual display resolution
     SDL_RenderCopy(renderer, texture, NULL, NULL);
     SDL_RenderPresent(renderer);
     return 0;
@@ -75,10 +83,31 @@ int init() {
     }
     c_log("SDL_Init OK");
 
-    c_log("Creating window 640x480...");
+    // Detect display resolution from framebuffer device
+    int fb_fd = open("/dev/fb0", O_RDONLY);
+    if (fb_fd >= 0) {
+        struct fb_var_screeninfo vinfo;
+        if (ioctl(fb_fd, FBIOGET_VSCREENINFO, &vinfo) == 0) {
+            display_width = vinfo.xres;
+            display_height = vinfo.yres;
+            c_logd("Detected FB resolution width: %d", display_width);
+            c_logd("Detected FB resolution height: %d", display_height);
+        } else {
+            c_log("Could not get FB info, using default 640x480");
+            display_width = 640;
+            display_height = 480;
+        }
+        close(fb_fd);
+    } else {
+        c_log("Could not open /dev/fb0, using default 640x480");
+        display_width = 640;
+        display_height = 480;
+    }
+
+    c_log("Creating window...");
     window = SDL_CreateWindow("MiyooPod",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-        SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
+        display_width, display_height, SDL_WINDOW_SHOWN);
     if (!window) {
         c_logf("SDL_CreateWindow failed: %s", SDL_GetError());
         return -1;
@@ -93,10 +122,10 @@ int init() {
     }
     c_log("Renderer created");
 
-    c_log("Creating texture (ABGR8888)...");
+    c_log("Creating texture at 640x480 (ABGR8888)...");
     texture = SDL_CreateTexture(renderer,
         SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING,
-        SCREEN_WIDTH, SCREEN_HEIGHT);
+        RENDER_WIDTH, RENDER_HEIGHT);
     if (!texture) {
         c_logf("SDL_CreateTexture failed: %s", SDL_GetError());
         return -1;

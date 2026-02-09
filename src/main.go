@@ -31,8 +31,9 @@ func (app *MiyooPod) Init() {
 	// Set global reference for logger
 	globalApp = app
 
-	// Default: logs enabled
-	app.WriteLogsEnabled = true
+	// Default: local logs disabled
+	app.LocalLogsEnabled = false
+	app.SentryEnabled = true // Default: developer logs enabled
 
 	logMsg("Initializing MiyooPod...")
 	logMsg("SDL init...")
@@ -80,8 +81,11 @@ func (app *MiyooPod) Init() {
 
 	// Load settings (theme and lock key) before showing splash - fast parse
 	if err := app.loadSettings(); err != nil {
-		logMsg(fmt.Sprintf("Could not load settings: %v (using defaults)", err))
+		logMsg(fmt.Sprintf("WARNING: Could not load settings: %v (using defaults)", err))
 	}
+
+	// Initialize Sentry client
+	app.initSentry()
 
 	// Draw splash screen with logo (now using restored theme if available)
 	app.drawLogoSplash()
@@ -95,10 +99,10 @@ func (app *MiyooPod) Init() {
 
 	// Generate initial icon PNG with current theme
 	if err := app.generateIconPNG(); err != nil {
-		logMsg(fmt.Sprintf("Failed to generate icon: %v", err))
+		logMsg(fmt.Sprintf("ERROR: Failed to generate icon: %v", err))
 	}
 
-	logMsg("MiyooPod init OK!")
+	logMsg("INFO: MiyooPod init OK!")
 }
 
 func (app *MiyooPod) loadFonts() {
@@ -145,8 +149,22 @@ func createApp() *MiyooPod {
 }
 
 func main() {
+	// Global panic recovery to log crashes before app dies
+	defer func() {
+		if r := recover(); r != nil {
+			logMsg(fmt.Sprintf("FATAL: Application crashed with panic: %v", r))
+			// Log stack trace
+			buf := make([]byte, 4096)
+			n := runtime.Stack(buf, false)
+			logMsg(fmt.Sprintf("FATAL: Stack trace:\n%s", string(buf[:n])))
+			// Give time for logs to write
+			time.Sleep(1 * time.Second)
+			panic(r) // Re-panic to show error
+		}
+	}()
+
 	logMsg("\n\n\n-----------")
-	logMsg("MiyooPod started!")
+	logMsg("INFO: MiyooPod started!")
 
 	app := createApp()
 	app.Init()
@@ -157,7 +175,7 @@ func main() {
 	// Load library from JSON or perform full scan
 	err := app.loadLibraryJSON()
 	if err != nil {
-		logMsg(fmt.Sprintf("Could not load library from JSON: %v", err))
+		logMsg(fmt.Sprintf("WARNING: Could not load library from JSON: %v", err))
 		logMsg("Performing full library scan...")
 		app.ScanLibrary()
 	}
@@ -168,6 +186,9 @@ func main() {
 
 	// Start playback poller
 	go app.startPlaybackPoller()
+
+	// Track app opened
+	TrackAppLifecycle("app_opened", nil)
 
 	// Draw initial menu
 	app.drawCurrentScreen()
@@ -183,10 +204,26 @@ func main() {
 		time.Sleep(33 * time.Millisecond) // ~30Hz polling, main thread sleeps most of the time
 	}
 
+	// Track app closed
+	TrackAppLifecycle("app_closed", nil)
+
 	// Cleanup: close refresh channel to unblock RunUI goroutine
 	close(app.RefreshChan)
 	C.audio_quit()
 	C.quit()
+}
+
+// setScreen changes the current screen and tracks the page view
+func (app *MiyooPod) setScreen(screen ScreenType) {
+	app.setScreenWithContext(screen, nil)
+}
+
+// setScreenWithContext changes screen with additional tracking context
+func (app *MiyooPod) setScreenWithContext(screen ScreenType, properties map[string]interface{}) {
+	if app.CurrentScreen != screen {
+		app.CurrentScreen = screen
+		TrackPageView(screen.String(), properties)
+	}
 }
 
 func (app *MiyooPod) handleKey(key Key) {
@@ -220,7 +257,7 @@ func (app *MiyooPod) handleKey(key Key) {
 	case START:
 		// Go to Now Playing screen
 		if app.Playing != nil && app.Playing.Track != nil {
-			app.CurrentScreen = ScreenNowPlaying
+			app.setScreen(ScreenNowPlaying)
 			app.drawCurrentScreen()
 		}
 		return
@@ -252,11 +289,11 @@ func (app *MiyooPod) handleKey(key Key) {
 func (app *MiyooPod) handleNowPlayingKey(key Key) {
 	switch key {
 	case LEFT, B:
-		app.CurrentScreen = ScreenMenu
+		app.setScreen(ScreenMenu)
 		app.drawCurrentScreen()
 	case RIGHT:
 		// Show queue
-		app.CurrentScreen = ScreenQueue
+		app.setScreen(ScreenQueue)
 		app.QueueScrollOffset = 0
 		app.QueueSelectedIndex = app.Queue.CurrentIndex // Start at currently playing track
 		app.drawCurrentScreen()

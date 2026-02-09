@@ -107,6 +107,23 @@ make go
 
 The build process uses CGO to compile Go source with C bindings and bundles all required shared libraries.
 
+## Changelog
+
+### Version 0.0.2
+- ✨ Added support for Miyoo Mini v4 (750×560 resolution)
+- ✨ Added support for Miyoo Mini Flip (750×560 resolution)
+- 🔧 Automatic resolution detection via framebuffer device
+- 🎨 UI scaling adapts to different screen sizes while maintaining aspect ratio
+- 🐛 Disabled local logs by default (developer logs still enabled)
+
+### Version 0.0.1
+- 🎉 Initial release
+- 🎵 iPod-inspired user interface
+- 🎨 11 customizable themes
+- 🖼️ Album art display and automatic fetching from MusicBrainz
+- 🔀 Shuffle and repeat modes
+- 📱 Optimized for Miyoo Mini Plus (640×480)
+
 ## Contributing
 
 MiyooPod is open-source! Contributions are welcome.

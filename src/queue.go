@@ -125,7 +125,7 @@ func (app *MiyooPod) drawQueueScreen() {
 func (app *MiyooPod) handleQueueKey(key Key) {
 	if app.Queue == nil || len(app.Queue.Tracks) == 0 {
 		if key == B || key == LEFT {
-			app.CurrentScreen = ScreenNowPlaying
+			app.setScreen(ScreenNowPlaying)
 			app.drawCurrentScreen()
 		}
 		return
@@ -151,14 +151,14 @@ func (app *MiyooPod) handleQueueKey(key Key) {
 		}
 		app.drawCurrentScreen()
 	case B, LEFT:
-		app.CurrentScreen = ScreenNowPlaying
+		app.setScreen(ScreenNowPlaying)
 		app.drawCurrentScreen()
 	case A:
 		// Jump to selected track and play it
 		// QueueSelectedIndex is the display/playback position
 		app.Queue.CurrentIndex = app.QueueSelectedIndex
 		app.playCurrentQueueTrack()
-		app.CurrentScreen = ScreenNowPlaying
+		app.setScreen(ScreenNowPlaying)
 		app.drawCurrentScreen()
 	case X:
 		// Remove selected track

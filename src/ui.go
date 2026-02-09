@@ -790,10 +790,14 @@ func (app *MiyooPod) toggleLock() {
 	app.Locked = !app.Locked
 
 	if app.Locked {
+		logMsg("INFO: Screen locked")
+		TrackAction("screen_locked", nil)
 		// Save current brightness and fully dim the screen
 		app.BrightnessBeforeLock = getBrightness()
 		setBrightness(0) // Fully dim (screen off)
 	} else {
+		logMsg("INFO: Screen unlocked")
+		TrackAction("screen_unlocked", nil)
 		// Restore previous brightness
 		if app.BrightnessBeforeLock > 0 {
 			setBrightness(app.BrightnessBeforeLock)

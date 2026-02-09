@@ -76,7 +76,7 @@ func (app *MiyooPod) waitForAboutExit() {
 
 		if key == B || key == MENU {
 			// Return to menu
-			app.CurrentScreen = ScreenMenu
+			app.setScreen(ScreenMenu)
 			app.drawMenuScreen()
 			return
 		}

@@ -1,0 +1,5 @@
+#!/bin/sh
+# Pre-commit hook to prevent committing PostHog token
+
+cd "$(git rev-parse --show-toplevel)"
+go run scripts/pre-commit-hook.go

@@ -448,7 +448,7 @@ func (app *MiyooPod) saveLibraryJSON() error {
 		return fmt.Errorf("failed to write library file: %v", err)
 	}
 
-	logMsg(fmt.Sprintf("Library saved to JSON in %v", time.Since(start)))
+	logMsg(fmt.Sprintf("INFO: Library saved to JSON in %v", time.Since(start)))
 	return nil
 }
 
@@ -587,7 +587,7 @@ func (app *MiyooPod) loadLibraryJSON() error {
 	// Decode album art
 	app.decodeAlbumArt()
 
-	logMsg(fmt.Sprintf("Library loaded from JSON: %d tracks, %d albums, %d artists, %d playlists in %v",
+	logMsg(fmt.Sprintf("INFO: Library losaded from JSON: %d tracks, %d albums, %d artists, %d playlists in %v",
 		len(lib.Tracks), len(lib.Albums), len(lib.Artists), len(lib.Playlists), time.Since(start)))
 
 	return nil
