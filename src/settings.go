@@ -16,6 +16,8 @@ type Settings struct {
 	LockKey          string `json:"lock_key,omitempty"`
 	LocalLogsEnabled bool   `json:"local_logs_enabled,omitempty"`
 	SentryEnabled    bool   `json:"sentry_enabled,omitempty"`
+	AutoLockMinutes  *int   `json:"auto_lock_minutes,omitempty"`
+	ScreenPeekEnabled *bool `json:"screen_peek_enabled,omitempty"`
 }
 
 // loadSettings loads theme and lock key preferences from a lightweight JSON file
@@ -82,6 +84,27 @@ func (app *MiyooPod) loadSettings() error {
 		logMsg("Developer logs (Sentry) disabled")
 	}
 
+	// Restore auto-lock minutes (default to 3 if not set)
+	if settings.AutoLockMinutes != nil {
+		app.AutoLockMinutes = *settings.AutoLockMinutes
+		if *settings.AutoLockMinutes == 0 {
+			logMsg("Auto-lock disabled")
+		} else {
+			logMsg(fmt.Sprintf("Auto-lock: %d minutes", *settings.AutoLockMinutes))
+		}
+	}
+	// else keep default value (3 minutes)
+
+	// Restore screen peek preference (default to true if not set)
+	if settings.ScreenPeekEnabled != nil {
+		app.ScreenPeekEnabled = *settings.ScreenPeekEnabled
+		if app.ScreenPeekEnabled {
+			logMsg("Screen peek enabled")
+		} else {
+			logMsg("Screen peek disabled")
+		}
+	}
+
 	return nil
 }
 
@@ -93,6 +116,8 @@ func (app *MiyooPod) saveSettings() error {
 		LockKey:          app.getLockKeyName(),
 		LocalLogsEnabled: app.LocalLogsEnabled,
 		SentryEnabled:    app.SentryEnabled,
+		AutoLockMinutes:   &app.AutoLockMinutes,
+		ScreenPeekEnabled: &app.ScreenPeekEnabled,
 	}
 
 	data, err := json.MarshalIndent(settings, "", "  ")

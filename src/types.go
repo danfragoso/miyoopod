@@ -10,7 +10,7 @@ import (
 
 // App metadata
 const (
-	APP_VERSION = "0.0.3"
+	APP_VERSION = "0.0.4"
 	APP_AUTHOR  = "Danilo Fragoso"
 	SUPPORT_URL = "https://github.com/danfragoso/miyoopod"
 )
@@ -594,6 +594,22 @@ type MiyooPod struct {
 	BrightnessBeforeLock int
 	LastYTime            time.Time
 	LockKey              Key // Which key is used for lock/unlock (default Y)
+
+	// Power/Display management
+	LastActivityTime     time.Time   // Last user interaction time
+	PowerButtonPressTime time.Time   // When power button was pressed (for long-hold detection)
+	PowerButtonPressed   bool        // Whether power button is currently held
+	MenuKeyPressed       bool        // Whether MENU key is currently held (for brightness control)
+	AutoLockMinutes      int         // Minutes of inactivity before auto-lock (0 = disabled)
+	ScreenPeekEnabled    bool        // Whether pressing buttons while locked briefly shows the screen
+	ScreenPeekActive     bool        // Whether screen is temporarily visible while locked
+	ScreenPeekTimer      *time.Timer // Timer to dim screen after peek
+
+	// Volume/Brightness overlay
+	OverlayType    string      // "volume" or "brightness"
+	OverlayValue   int         // Current value (0-100)
+	OverlayTimer   *time.Timer // Timer to hide overlay
+	OverlayVisible bool        // Whether overlay is currently shown
 
 	// Queue view state
 	QueueScrollOffset int // Scroll position for queue view

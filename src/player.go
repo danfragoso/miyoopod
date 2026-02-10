@@ -357,6 +357,11 @@ func (app *MiyooPod) updateProgressBarOnly() {
 		return
 	}
 
+	// Don't draw progress bar over lock overlay
+	if app.Locked {
+		return
+	}
+
 	// Double-check we're still on Now Playing screen
 	if app.CurrentScreen != ScreenNowPlaying {
 		return

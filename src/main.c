@@ -49,6 +49,11 @@ int pollEvents() {
         if (event.type == SDL_KEYDOWN) {
             return event.key.keysym.sym;
         }
+        // Return negative value for key release (to distinguish from key press)
+        // We use -(keycode + 1) to avoid collision with -1 (no event)
+        if (event.type == SDL_KEYUP) {
+            return -(event.key.keysym.sym + 1);
+        }
     }
     return -1;
 }

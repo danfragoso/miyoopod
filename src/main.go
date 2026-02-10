@@ -32,7 +32,7 @@ func (app *MiyooPod) Init() {
 	globalApp = app
 
 	// Default: local logs disabled
-	app.LocalLogsEnabled = false
+	app.LocalLogsEnabled = true
 	app.SentryEnabled = true // Default: developer logs enabled
 
 	// Initialize PostHog client early so C logs during SDL init are captured
@@ -76,6 +76,11 @@ func (app *MiyooPod) Init() {
 	app.RefreshChan = make(chan struct{}, 1)
 	app.LockKey = Y // Default lock key
 
+	// Power management defaults
+	app.AutoLockMinutes = 3 // Auto-lock after 3 minutes of inactivity
+	app.ScreenPeekEnabled = true
+	app.LastActivityTime = time.Now()
+
 	// Pre-render digit sprites for fast time display (bypass gg in hot path)
 	app.initDigitSprites(app.FontTime)
 
@@ -96,6 +101,9 @@ func (app *MiyooPod) Init() {
 
 	// Give user time to see version status
 	time.Sleep(1500 * time.Millisecond)
+
+	// Start power button monitor (reads directly from /dev/input/event0)
+	app.startPowerButtonMonitor()
 
 	// Generate initial icon PNG with current theme
 	if err := app.generateIconPNG(); err != nil {
@@ -187,6 +195,9 @@ func main() {
 	// Start playback poller
 	go app.startPlaybackPoller()
 
+	// Start inactivity monitor for auto-lock
+	go app.startInactivityMonitor()
+
 	// Track app opened
 	TrackAppLifecycle("app_opened", nil)
 
@@ -197,9 +208,18 @@ func main() {
 	// SDL_PollEvent MUST run on the thread that called SDL_Init (LockOSThread in init)
 	// Sleep between polls to keep CPU usage low (replaces old runtime.Gosched spin loop)
 	for app.Running {
-		key := Key(C_GetKeyPress())
-		if key != NONE {
-			app.handleKey(key)
+		keyEvent := C_GetKeyPress()
+		if keyEvent != -1 {
+			// Log the keycode for debugging
+			if keyEvent < 0 {
+				// Key release event (negative value)
+				// Convert back: -(keycode + 1) -> keycode
+				keyReleased := Key(-keyEvent - 1)
+				app.handleKeyRelease(keyReleased)
+			} else {
+				// Key press event (positive value)
+				app.handleKey(Key(keyEvent))
+			}
 		}
 		time.Sleep(33 * time.Millisecond) // ~30Hz polling, main thread sleeps most of the time
 	}
@@ -209,6 +229,7 @@ func main() {
 
 	// Cleanup: close refresh channel to unblock RunUI goroutine
 	close(app.RefreshChan)
+
 	C.audio_quit()
 	C.quit()
 }
@@ -226,16 +247,32 @@ func (app *MiyooPod) setScreenWithContext(screen ScreenType, properties map[stri
 	}
 }
 
+// handleKeyRelease handles key release events
+func (app *MiyooPod) handleKeyRelease(key Key) {
+	// Currently no key release handling needed for SDL keys
+	// Power button is handled directly in input.go
+}
+
 func (app *MiyooPod) handleKey(key Key) {
-	// If locked, only allow double-press of the lock key to unlock
+	// Update last activity time for any key press
+	app.LastActivityTime = time.Now()
+
+	// If locked, handle peek or unlock
 	if app.Locked {
+		// Check for double-press of lock key to unlock
 		if key == app.LockKey {
 			now := time.Now()
 			if now.Sub(app.LastYTime) < 500*time.Millisecond {
 				// Double press detected - unlock
 				app.toggleLock()
+			} else {
+				// Single press - just peek
+				app.peekScreen()
 			}
 			app.LastYTime = now
+		} else {
+			// Any other key - just peek the screen
+			app.peekScreen()
 		}
 		return
 	}
@@ -324,6 +361,11 @@ func (app *MiyooPod) drawCurrentScreen() {
 	// Draw lock overlay if locked
 	if app.Locked {
 		app.drawLockOverlay()
+	}
+
+	// Draw volume/brightness overlay if visible
+	if app.OverlayVisible {
+		app.drawVolumeOrBrightnessOverlay()
 	}
 
 	// Draw error popup overlay if active

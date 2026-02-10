@@ -20,14 +20,14 @@ const (
 	Y Key = 1073742050 // SDLK_LALT (KEY_LEFTALT)
 
 	// Shoulder buttons
-	L  Key = 101        // SDLK_e (KEY_E)
-	L2 Key = 9          // SDLK_TAB (KEY_TAB)
-	R  Key = 116        // SDLK_t (KEY_T)
-	R2 Key = 8          // SDLK_BACKSPACE (KEY_BACKSPACE)
+	L  Key = 101 // SDLK_e (KEY_E)
+	L2 Key = 9   // SDLK_TAB (KEY_TAB)
+	R  Key = 116 // SDLK_t (KEY_T)
+	R2 Key = 8   // SDLK_BACKSPACE (KEY_BACKSPACE)
 
 	// System buttons
 	SELECT Key = 1073742052 // SDLK_RCTRL (KEY_RIGHTCTRL)
 	START  Key = 13         // SDLK_RETURN (KEY_ENTER)
 	MENU   Key = 27         // SDLK_ESCAPE (KEY_ESC)
+	POWER  Key = 0          // SDLK_UNKNOWN / SDLK_FIRST (Onion OS maps KEY_POWER to SDLK_FIRST which is 0)
 )
-

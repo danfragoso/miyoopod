@@ -792,12 +792,22 @@ func (app *MiyooPod) toggleLock() {
 	if app.Locked {
 		logMsg("INFO: Screen locked")
 		TrackAction("screen_locked", nil)
+		// Cancel any active peek timer
+		if app.ScreenPeekTimer != nil {
+			app.ScreenPeekTimer.Stop()
+			app.ScreenPeekActive = false
+		}
 		// Save current brightness and fully dim the screen
 		app.BrightnessBeforeLock = getBrightness()
-		setBrightness(0) // Fully dim (screen off)
+		app.dimScreen()
 	} else {
 		logMsg("INFO: Screen unlocked")
 		TrackAction("screen_unlocked", nil)
+		// Cancel any active peek timer
+		if app.ScreenPeekTimer != nil {
+			app.ScreenPeekTimer.Stop()
+			app.ScreenPeekActive = false
+		}
 		// Restore previous brightness
 		if app.BrightnessBeforeLock > 0 {
 			setBrightness(app.BrightnessBeforeLock)
@@ -830,7 +840,11 @@ func (app *MiyooPod) drawLockOverlay() {
 	dc.SetFontFace(app.FontSmall)
 	dc.SetHexColor("#CCCCCC")
 	lockKeyName := app.getLockKeyName()
-	dc.DrawStringAnchored(fmt.Sprintf("Double-press %s to unlock", lockKeyName), centerX, centerY+15, 0.5, 0.5)
+	dc.DrawStringAnchored(fmt.Sprintf("Press POWER or double-press %s to unlock", lockKeyName), centerX, centerY+15, 0.5, 0.5)
+
+	// Force quit hint
+	dc.SetHexColor("#999999")
+	dc.DrawStringAnchored("Hold POWER for 5s to force quit", centerX, centerY+40, 0.5, 0.5)
 }
 
 // getBrightness reads the current PWM duty_cycle (brightness level)
@@ -856,4 +870,119 @@ func setBrightness(level int) {
 		level = 100
 	}
 	os.WriteFile("/sys/class/pwm/pwmchip0/pwm0/duty_cycle", []byte(fmt.Sprintf("%d", level)), 0644)
+}
+
+// drawVolumeOrBrightnessOverlay draws Mac-style overlay for volume/brightness
+func (app *MiyooPod) drawVolumeOrBrightnessOverlay() {
+	dc := app.DC
+
+	// Overlay dimensions (centered)
+	overlayW := 300.0
+	overlayH := 120.0
+	overlayX := (SCREEN_WIDTH - overlayW) / 2
+	overlayY := (SCREEN_HEIGHT - overlayH) / 2
+	radius := 16.0
+
+	// Semi-transparent background
+	dc.SetRGBA(0, 0, 0, 0.85)
+	dc.DrawRoundedRectangle(overlayX, overlayY, overlayW, overlayH, radius)
+	dc.Fill()
+
+	// Draw icon
+	iconSize := 40.0
+	iconX := overlayX + 30
+	iconY := overlayY + 25
+
+	dc.SetRGBA(1, 1, 1, 1) // White
+	if app.OverlayType == "brightness" {
+		app.drawBrightnessIcon(iconX, iconY, iconSize)
+	} else {
+		app.drawVolumeIcon(iconX, iconY, iconSize)
+	}
+
+	// Progress bar
+	barX := overlayX + 90
+	barY := overlayY + 40
+	barW := 180.0
+	barH := 20.0
+	barRadius := 10.0
+
+	// Bar background
+	dc.SetRGBA(0.3, 0.3, 0.3, 1)
+	dc.DrawRoundedRectangle(barX, barY, barW, barH, barRadius)
+	dc.Fill()
+
+	// Bar fill
+	fillW := (barW * float64(app.OverlayValue)) / 100.0
+	if fillW > 0 {
+		dc.SetRGBA(1, 1, 1, 1) // White fill
+		dc.DrawRoundedRectangle(barX, barY, fillW, barH, barRadius)
+		dc.Fill()
+	}
+
+	// Percentage text
+	dc.SetFontFace(app.FontSmall)
+	dc.SetRGBA(1, 1, 1, 1)
+	dc.DrawStringAnchored(fmt.Sprintf("%d%%", app.OverlayValue), overlayX+overlayW/2, overlayY+overlayH-20, 0.5, 0.5)
+}
+
+// drawBrightnessIcon draws a sun icon for brightness
+func (app *MiyooPod) drawBrightnessIcon(x, y, size float64) {
+	dc := app.DC
+	centerX := x + size/2
+	centerY := y + size/2
+	radius := size / 4
+
+	// Center circle
+	dc.DrawCircle(centerX, centerY, radius)
+	dc.Fill()
+
+	// Rays (8 lines around the circle)
+	rayLen := size / 4
+	outerRadius := radius + 4
+	for i := 0; i < 8; i++ {
+		angle := float64(i) * math.Pi / 4
+		x1 := centerX + math.Cos(angle)*outerRadius
+		y1 := centerY + math.Sin(angle)*outerRadius
+		x2 := centerX + math.Cos(angle)*(outerRadius+rayLen)
+		y2 := centerY + math.Sin(angle)*(outerRadius+rayLen)
+		dc.SetLineWidth(2)
+		dc.DrawLine(x1, y1, x2, y2)
+		dc.Stroke()
+	}
+}
+
+// drawVolumeIcon draws a speaker icon for volume
+func (app *MiyooPod) drawVolumeIcon(x, y, size float64) {
+	dc := app.DC
+	s := size // shorthand
+
+	// Speaker body (small rectangle on the left)
+	bodyW := s * 0.15
+	bodyH := s * 0.3
+	bodyX := x + s*0.05
+	bodyY := y + (s-bodyH)/2
+
+	dc.DrawRectangle(bodyX, bodyY, bodyW, bodyH)
+	dc.Fill()
+
+	// Speaker cone (trapezoid expanding to the right)
+	coneX := bodyX + bodyW
+	coneW := s * 0.2
+	dc.MoveTo(coneX, bodyY)
+	dc.LineTo(coneX+coneW, y+s*0.15)
+	dc.LineTo(coneX+coneW, y+s*0.85)
+	dc.LineTo(coneX, bodyY+bodyH)
+	dc.ClosePath()
+	dc.Fill()
+
+	// Sound waves (3 arcs, scaled to fit within size)
+	waveX := coneX + coneW + s*0.05
+	waveY := y + s/2
+	dc.SetLineWidth(2)
+	for i := 1; i <= 3; i++ {
+		arcRadius := float64(i) * s * 0.12
+		dc.DrawArc(waveX, waveY, arcRadius, -math.Pi/4, math.Pi/4)
+		dc.Stroke()
+	}
 }

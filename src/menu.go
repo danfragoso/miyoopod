@@ -265,15 +265,6 @@ func (app *MiyooPod) buildSettingsMenuItems(root *MenuScreen) []*MenuItem {
 		Submenu:    themesMenu,
 	})
 
-	// Lock Key option
-	lockKeyName := app.getLockKeyName()
-	items = append(items, &MenuItem{
-		Label: "Lock Key: " + lockKeyName,
-		Action: func() {
-			app.cycleLockKey()
-		},
-	})
-
 	// Local Logs option
 	localLogStatus := "Off"
 	if app.LocalLogsEnabled {
@@ -295,6 +286,30 @@ func (app *MiyooPod) buildSettingsMenuItems(root *MenuScreen) []*MenuItem {
 		Label: "Developer Logs: " + sentryStatus,
 		Action: func() {
 			app.toggleSentry()
+		},
+	})
+
+	// Auto Screen Lock option
+	autoLockStatus := "Off"
+	if app.AutoLockMinutes > 0 {
+		autoLockStatus = fmt.Sprintf("%d min", app.AutoLockMinutes)
+	}
+	items = append(items, &MenuItem{
+		Label: "Auto Screen Lock: " + autoLockStatus,
+		Action: func() {
+			app.cycleAutoLock()
+		},
+	})
+
+	// Screen Peek option
+	peekStatus := "Off"
+	if app.ScreenPeekEnabled {
+		peekStatus = "On"
+	}
+	items = append(items, &MenuItem{
+		Label: "Screen Peek: " + peekStatus,
+		Action: func() {
+			app.toggleScreenPeek()
 		},
 	})
 
@@ -755,44 +770,5 @@ func (app *MiyooPod) getLockKeyName() string {
 		return "R2"
 	default:
 		return "Y"
-	}
-}
-
-// cycleLockKey cycles to the next available lock key
-func (app *MiyooPod) cycleLockKey() {
-	switch app.LockKey {
-	case Y:
-		app.LockKey = X
-	case X:
-		app.LockKey = SELECT
-	case SELECT:
-		app.LockKey = MENU
-	case MENU:
-		app.LockKey = L2
-	case L2:
-		app.LockKey = R2
-	case R2:
-		app.LockKey = Y
-	default:
-		app.LockKey = Y
-	}
-
-	// Rebuild the settings menu to update the label
-	app.RootMenu = app.buildRootMenu()
-	app.MenuStack = []*MenuScreen{app.RootMenu}
-
-	// Navigate to settings menu
-	for _, item := range app.RootMenu.Items {
-		if item.Label == "Settings" {
-			app.MenuStack = append(app.MenuStack, item.Submenu)
-			break
-		}
-	}
-
-	app.drawCurrentScreen()
-
-	// Save lock key preference to settings file (fast)
-	if err := app.saveSettings(); err != nil {
-		logMsg(fmt.Sprintf("ERROR: Failed to save lock key preference: %v", err))
 	}
 }

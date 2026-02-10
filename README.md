@@ -109,6 +109,15 @@ The build process uses CGO to compile Go source with C bindings and bundles all 
 
 ## Changelog
 
+### Version 0.0.4
+- 🔊 Fixed volume control using MI_AO ioctl (correct indirect buffer layout matching Onion/keymon)
+- 🔊 Fixed volume icon SVG being cut off in the overlay
+-  🔒 Added screen lock with power button
+- 🔒 Added auto screen lock setting (1/3/5/10 min or disabled)
+- 🔒 Added screen peek toggle setting (enable/disable screen wake on button press while locked)
+- 🐛 Fixed brightness and volume being adjustable while screen is locked
+- 🐛 Fixed now playing progress bar drawing over the lock overlay
+
 ### Version 0.0.3
 - 🔧 Fixed PostHog logging initialization order
 - 📊 C logs from SDL initialization now properly captured
