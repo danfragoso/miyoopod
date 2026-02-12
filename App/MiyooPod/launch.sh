@@ -5,6 +5,21 @@ export SDL_VIDEODRIVER=mmiyoo
 export SDL_AUDIODRIVER=mmiyoo
 export EGL_VIDEODRIVER=mmiyoo
 
+# Bootstrap: swap in any staged files from OTA update
+# Updater can't replace libs or itself while running, so they're saved as .new
+if [ -f "./updater_new" ]; then
+    mv ./updater_new ./updater
+    chmod +x ./updater
+fi
+
+# Swap staged shared libraries from OTA update
+for newlib in ./libs/*.new; do
+    [ -f "$newlib" ] || continue
+    target="${newlib%.new}"
+    mv "$newlib" "$target"
+    chmod +x "$target"
+done
+
 # Use Onion's proper audio server stop script if available
 if [ -f "/mnt/SDCARD/.tmp_update/script/stop_audioserver.sh" ]; then
     . /mnt/SDCARD/.tmp_update/script/stop_audioserver.sh

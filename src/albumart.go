@@ -9,130 +9,309 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
-// scanAlbumArt fetches missing album artwork from MusicBrainz with progress UI
+// scanAlbumArt starts fetching missing album artwork in a background goroutine.
+// Switches to ScreenAlbumArt so the main loop handles keys normally.
 func (app *MiyooPod) scanAlbumArt() {
-	dc := app.DC
+	if app.AlbumArtFetching {
+		return
+	}
 
 	// Count albums without art
 	missingCount := 0
 	for _, album := range app.Library.Albums {
-		if album.ArtData == nil && album.ArtPath == "" {
+		if album.ArtData == nil && album.ArtPath == "" && album.Name != "" && album.Artist != "" {
 			missingCount++
 		}
 	}
 
 	if missingCount == 0 {
-		app.showAlbumArtResult("All albums have artwork!!", 0, 0, 0)
+		app.AlbumArtFetching = false
+		app.AlbumArtDone = true
+		app.AlbumArtElapsed = ""
+		app.AlbumArtFetched = 0
+		app.AlbumArtFailed = 0
+		app.AlbumArtTotal = 0
+		app.AlbumArtStatus = "All albums have artwork!"
+		app.AlbumArtAlbumName = ""
+		app.AlbumArtArtist = ""
+		app.setScreen(ScreenAlbumArt)
+		app.drawCurrentScreen()
 		return
 	}
 
+	// Initialize state
+	app.AlbumArtFetching = true
+	app.AlbumArtDone = false
+	app.AlbumArtCurrent = 0
+	app.AlbumArtTotal = missingCount
+	app.AlbumArtFetched = 0
+	app.AlbumArtFailed = 0
+	app.AlbumArtAlbumName = ""
+	app.AlbumArtArtist = ""
+	app.AlbumArtStatus = "Starting..."
+	app.AlbumArtElapsed = ""
+
+	app.setScreen(ScreenAlbumArt)
+	app.drawCurrentScreen()
+
+	go app.runAlbumArtFetch()
+}
+
+// runAlbumArtFetch is the background goroutine that fetches album art.
+// IMPORTANT: Never call draw functions from here — only update state and requestRedraw.
+func (app *MiyooPod) runAlbumArtFetch() {
 	start := time.Now()
-	fetchedCount := 0
-	failedCount := 0
-	currentAlbum := 0
 
 	for _, album := range app.Library.Albums {
-		if album.ArtData == nil && album.ArtPath == "" && album.Name != "" && album.Artist != "" {
-			currentAlbum++
+		if !app.Running || !app.AlbumArtFetching {
+			break
+		}
 
-			// Fetch artwork with UI updates
-			if app.fetchAlbumArtFromMusicBrainzWithUI(album, currentAlbum, missingCount) {
-				fetchedCount++
-			} else {
-				failedCount++
+		if album.ArtData == nil && album.ArtPath == "" && album.Name != "" && album.Artist != "" {
+			app.AlbumArtCurrent++
+			app.AlbumArtAlbumName = album.Name
+			app.AlbumArtArtist = album.Artist
+			app.AlbumArtStatus = "Searching MusicBrainz..."
+			app.requestRedraw()
+
+			// Status callback updates state and signals redraw (no draw calls)
+			app.albumArtStatusFunc = func(status string) {
+				app.AlbumArtStatus = status
+				app.requestRedraw()
 			}
+
+			if app.fetchAlbumArtFromMusicBrainz(album) {
+				app.AlbumArtFetched++
+			} else {
+				app.AlbumArtFailed++
+			}
+
+			app.albumArtStatusFunc = nil
 		}
 	}
 
 	// Decode newly fetched artwork
-	if fetchedCount > 0 {
-		app.showAlbumArtProgress(nil, missingCount, missingCount, "Decoding artwork...") // Show "Decoding..."
-		dc.SetHexColor(app.CurrentTheme.BG)
-		dc.Clear()
-		dc.SetFontFace(app.FontMenu)
-		dc.SetHexColor(app.CurrentTheme.ItemTxt)
-		dc.DrawStringAnchored("Decoding album artwork...", SCREEN_WIDTH/2, SCREEN_HEIGHT/2, 0.5, 0.5)
-		app.triggerRefresh()
+	if app.AlbumArtFetched > 0 {
+		app.AlbumArtStatus = "Decoding artwork..."
+		app.AlbumArtAlbumName = ""
+		app.AlbumArtArtist = ""
+		app.requestRedraw()
 
 		app.decodeAlbumArt()
 
-		// Save library with new artwork
 		if err := app.saveLibraryJSON(); err != nil {
 			logMsg(fmt.Sprintf("WARNING: Failed to save library: %v", err))
 		}
 	}
 
-	// Show results
 	elapsed := time.Since(start)
-	app.showAlbumArtResult(fmt.Sprintf("Scan complete in %v", elapsed), fetchedCount, failedCount, missingCount)
+	app.AlbumArtElapsed = elapsed.Truncate(time.Second).String()
+	app.AlbumArtFetching = false
+	app.AlbumArtDone = true
+	app.requestRedraw()
 }
 
-// showAlbumArtProgress displays progress during album art scanning
-func (app *MiyooPod) showAlbumArtProgress(album *Album, current, total int, status string) {
+// drawAlbumArtScreen renders the album art fetch screen using list-style layout.
+// Called from drawCurrentScreen on the main thread only.
+func (app *MiyooPod) drawAlbumArtScreen() {
 	dc := app.DC
 
 	dc.SetHexColor(app.CurrentTheme.BG)
 	dc.Clear()
 
-	// Header
 	app.drawHeader("Fetch Album Art")
 
-	// Progress text
+	if app.AlbumArtDone {
+		app.drawAlbumArtResults()
+		return
+	}
+
+	// List-style progress display (like queue/menu screens)
+	y := MENU_TOP_Y
+
+	// Row 1: Progress count
 	dc.SetFontFace(app.FontMenu)
 	dc.SetHexColor(app.CurrentTheme.ItemTxt)
-	progressText := fmt.Sprintf("Scanning %d of %d albums", current, total)
-	dc.DrawStringAnchored(progressText, SCREEN_WIDTH/2, SCREEN_HEIGHT/2-60, 0.5, 0.5)
+	textY := float64(y) + float64(MENU_ITEM_HEIGHT)/2
+	dc.DrawStringAnchored(
+		fmt.Sprintf("Scanning %d of %d albums", app.AlbumArtCurrent, app.AlbumArtTotal),
+		float64(MENU_LEFT_PAD), textY, 0, 0.5,
+	)
 
-	// Progress bar
-	barWidth := 400
-	barHeight := 30
-	barX := (SCREEN_WIDTH - barWidth) / 2
-	barY := SCREEN_HEIGHT/2 - 20
-
-	// Background
-	dc.SetHexColor(app.CurrentTheme.Dim)
-	dc.DrawRectangle(float64(barX), float64(barY), float64(barWidth), float64(barHeight))
-	dc.Fill()
-
-	// Progress fill
-	if total > 0 {
-		fillWidth := int(float64(barWidth) * float64(current) / float64(total))
-		dc.SetHexColor(app.CurrentTheme.SelBG)
-		dc.DrawRectangle(float64(barX), float64(barY), float64(fillWidth), float64(barHeight))
-		dc.Fill()
-	}
-
-	// Border
-	dc.SetHexColor(app.CurrentTheme.ItemTxt)
-	dc.SetLineWidth(2)
-	dc.DrawRectangle(float64(barX), float64(barY), float64(barWidth), float64(barHeight))
-	dc.Stroke()
-
-	// Current album info
-	if album != nil {
-		dc.SetFontFace(app.FontSmall)
-		dc.SetHexColor(app.CurrentTheme.ItemTxt)
-		albumInfo := app.truncateText(fmt.Sprintf("%s - %s", album.Artist, album.Name),
-			float64(SCREEN_WIDTH-40), app.FontSmall)
-		dc.DrawStringAnchored(albumInfo, SCREEN_WIDTH/2, SCREEN_HEIGHT/2+40, 0.5, 0.5)
-	}
-
-	// Status message
-	if status != "" {
+	// Progress fraction on right
+	if app.AlbumArtTotal > 0 {
 		dc.SetFontFace(app.FontSmall)
 		dc.SetHexColor(app.CurrentTheme.Dim)
-		// Wrap long status messages
-		lines := wrapText(status, float64(SCREEN_WIDTH-40), app.FontSmall)
-		yPos := SCREEN_HEIGHT/2 + 65
-		for i, line := range lines {
-			if i >= 3 { // Max 3 lines
-				break
-			}
-			dc.DrawStringAnchored(line, SCREEN_WIDTH/2, float64(yPos+(i*18)), 0.5, 0.5)
+		pct := int(100 * float64(app.AlbumArtCurrent) / float64(app.AlbumArtTotal))
+		dc.DrawStringAnchored(fmt.Sprintf("%d%%", pct), float64(SCREEN_WIDTH-MENU_RIGHT_PAD), textY, 1, 0.5)
+	}
+	y += MENU_ITEM_HEIGHT
+
+	// Progress bar (full width, thin)
+	barX := MENU_LEFT_PAD
+	barW := SCREEN_WIDTH - MENU_LEFT_PAD - MENU_RIGHT_PAD
+	barH := 6
+
+	dc.SetHexColor(app.CurrentTheme.ProgBG)
+	dc.DrawRoundedRectangle(float64(barX), float64(y), float64(barW), float64(barH), 3)
+	dc.Fill()
+
+	if app.AlbumArtTotal > 0 {
+		fillW := int(float64(barW) * float64(app.AlbumArtCurrent) / float64(app.AlbumArtTotal))
+		if fillW > 0 {
+			dc.SetHexColor(app.CurrentTheme.Accent)
+			dc.DrawRoundedRectangle(float64(barX), float64(y), float64(fillW), float64(barH), 3)
+			dc.Fill()
 		}
 	}
+	y += barH + 12
 
-	app.triggerRefresh()
+	// Row 2: Current album (highlighted like a selected menu item)
+	if app.AlbumArtAlbumName != "" {
+		dc.SetHexColor(app.CurrentTheme.SelBG)
+		dc.DrawRectangle(0, float64(y), SCREEN_WIDTH, MENU_ITEM_HEIGHT)
+		dc.Fill()
+
+		dc.SetFontFace(app.FontMenu)
+		dc.SetHexColor(app.CurrentTheme.SelTxt)
+		albumLabel := app.truncateText(app.AlbumArtAlbumName, float64(SCREEN_WIDTH-MENU_LEFT_PAD-MENU_RIGHT_PAD), app.FontMenu)
+		textY = float64(y) + float64(MENU_ITEM_HEIGHT)/2
+		dc.DrawStringAnchored(albumLabel, float64(MENU_LEFT_PAD), textY, 0, 0.5)
+
+		// Artist on right
+		dc.SetFontFace(app.FontSmall)
+		dc.SetHexColor(app.CurrentTheme.SelTxt)
+		artistLabel := app.truncateText(app.AlbumArtArtist, 200, app.FontSmall)
+		dc.DrawStringAnchored(artistLabel, float64(SCREEN_WIDTH-MENU_RIGHT_PAD), textY, 1, 0.5)
+		y += MENU_ITEM_HEIGHT
+	}
+
+	// Row 3: Status message
+	if app.AlbumArtStatus != "" {
+		dc.SetFontFace(app.FontSmall)
+		dc.SetHexColor(app.CurrentTheme.Dim)
+		textY = float64(y) + float64(MENU_ITEM_HEIGHT)/2
+		statusText := app.truncateText(app.AlbumArtStatus, float64(SCREEN_WIDTH-MENU_LEFT_PAD-MENU_RIGHT_PAD), app.FontSmall)
+		dc.DrawStringAnchored(statusText, float64(MENU_LEFT_PAD), textY, 0, 0.5)
+		y += MENU_ITEM_HEIGHT
+	}
+
+	// Row 4+: Running totals
+	if app.AlbumArtFetched > 0 || app.AlbumArtFailed > 0 {
+		dc.SetFontFace(app.FontSmall)
+		textY = float64(y) + float64(MENU_ITEM_HEIGHT)/2
+
+		dc.SetHexColor(app.CurrentTheme.Accent)
+		dc.DrawStringAnchored(fmt.Sprintf("Fetched: %d", app.AlbumArtFetched), float64(MENU_LEFT_PAD), textY, 0, 0.5)
+
+		if app.AlbumArtFailed > 0 {
+			dc.SetHexColor(app.CurrentTheme.Dim)
+			dc.DrawStringAnchored(fmt.Sprintf("Failed: %d", app.AlbumArtFailed), float64(MENU_LEFT_PAD+150), textY, 0, 0.5)
+		}
+	}
+}
+
+// drawAlbumArtResults renders the results after album art scanning is done.
+func (app *MiyooPod) drawAlbumArtResults() {
+	dc := app.DC
+	y := MENU_TOP_Y
+
+	// Row 1: Elapsed time
+	dc.SetFontFace(app.FontMenu)
+	dc.SetHexColor(app.CurrentTheme.ItemTxt)
+	textY := float64(y) + float64(MENU_ITEM_HEIGHT)/2
+	title := "Scan complete"
+	if app.AlbumArtElapsed != "" {
+		title = fmt.Sprintf("Scan complete in %s", app.AlbumArtElapsed)
+	}
+	if app.AlbumArtTotal == 0 {
+		title = app.AlbumArtStatus // "All albums have artwork!"
+	}
+	dc.DrawStringAnchored(title, float64(MENU_LEFT_PAD), textY, 0, 0.5)
+	y += MENU_ITEM_HEIGHT
+
+	// Separator line
+	dc.SetHexColor(app.CurrentTheme.ProgBG)
+	dc.DrawRectangle(float64(MENU_LEFT_PAD), float64(y), float64(SCREEN_WIDTH-MENU_LEFT_PAD-MENU_RIGHT_PAD), 1)
+	dc.Fill()
+	y += 8
+
+	// Results rows
+	if app.AlbumArtTotal > 0 {
+		// Fetched count
+		dc.SetFontFace(app.FontMenu)
+		dc.SetHexColor(app.CurrentTheme.ItemTxt)
+		textY = float64(y) + float64(MENU_ITEM_HEIGHT)/2
+		dc.DrawStringAnchored("Fetched", float64(MENU_LEFT_PAD), textY, 0, 0.5)
+		dc.SetHexColor(app.CurrentTheme.Accent)
+		dc.DrawStringAnchored(fmt.Sprintf("%d", app.AlbumArtFetched), float64(SCREEN_WIDTH-MENU_RIGHT_PAD), textY, 1, 0.5)
+		y += MENU_ITEM_HEIGHT
+
+		// Failed count
+		if app.AlbumArtFailed > 0 {
+			dc.SetFontFace(app.FontMenu)
+			dc.SetHexColor(app.CurrentTheme.ItemTxt)
+			textY = float64(y) + float64(MENU_ITEM_HEIGHT)/2
+			dc.DrawStringAnchored("Failed", float64(MENU_LEFT_PAD), textY, 0, 0.5)
+			dc.SetHexColor(app.CurrentTheme.Dim)
+			dc.DrawStringAnchored(fmt.Sprintf("%d", app.AlbumArtFailed), float64(SCREEN_WIDTH-MENU_RIGHT_PAD), textY, 1, 0.5)
+			y += MENU_ITEM_HEIGHT
+		}
+
+		// Still missing
+		stillMissing := app.AlbumArtTotal - app.AlbumArtFetched
+		if stillMissing > 0 {
+			dc.SetFontFace(app.FontMenu)
+			dc.SetHexColor(app.CurrentTheme.ItemTxt)
+			textY = float64(y) + float64(MENU_ITEM_HEIGHT)/2
+			dc.DrawStringAnchored("Still missing", float64(MENU_LEFT_PAD), textY, 0, 0.5)
+			dc.SetHexColor(app.CurrentTheme.Dim)
+			dc.DrawStringAnchored(fmt.Sprintf("%d", stillMissing), float64(SCREEN_WIDTH-MENU_RIGHT_PAD), textY, 1, 0.5)
+		}
+	}
+}
+
+// drawAlbumArtStatusBar renders the status bar for the album art screen.
+func (app *MiyooPod) drawAlbumArtStatusBar() {
+	dc := app.DC
+
+	barY := float64(SCREEN_HEIGHT - STATUS_BAR_HEIGHT)
+
+	// Background
+	dc.SetHexColor(app.CurrentTheme.HeaderBG)
+	dc.DrawRectangle(0, barY, SCREEN_WIDTH, STATUS_BAR_HEIGHT)
+	dc.Fill()
+
+	centerY := barY + float64(STATUS_BAR_HEIGHT)/2
+
+	if app.AlbumArtDone {
+		app.drawButtonLegend(12, centerY, "B", "Back")
+		stillMissing := app.AlbumArtTotal - app.AlbumArtFetched
+		if stillMissing > 0 {
+			app.drawButtonLegend(100, centerY, "A", "Retry")
+		}
+	} else {
+		app.drawButtonLegend(12, centerY, "B", "Cancel")
+	}
+}
+
+// handleAlbumArtKey handles key input on the album art screen.
+func (app *MiyooPod) handleAlbumArtKey(key Key) {
+	switch key {
+	case B, MENU:
+		app.AlbumArtFetching = false // Signal goroutine to stop
+		app.AlbumArtDone = false
+		app.setScreen(ScreenMenu)
+		app.drawCurrentScreen()
+	case A:
+		if app.AlbumArtDone {
+			stillMissing := app.AlbumArtTotal - app.AlbumArtFetched
+			if stillMissing > 0 {
+				app.AlbumArtDone = false
+				app.scanAlbumArt()
+			}
+		}
+	}
 }
 
 // wrapText breaks text into lines that fit within maxWidth
@@ -180,105 +359,10 @@ func measureString(s string, face font.Face) float64 {
 		}
 		adv, ok := face.GlyphAdvance(r)
 		if !ok {
-			// Fallback for missing glyphs
 			continue
 		}
 		width += adv
 		prevRune = r
 	}
-	return float64(width) / 64.0 // Convert from fixed.Int26_6 to float64
-}
-
-// fetchAlbumArtFromMusicBrainzWithUI wraps the MusicBrainz fetch with UI status updates
-func (app *MiyooPod) fetchAlbumArtFromMusicBrainzWithUI(album *Album, current, total int) bool {
-	// Set up status callback
-	app.albumArtStatusFunc = func(status string) {
-		app.showAlbumArtProgress(album, current, total, status)
-	}
-	defer func() {
-		app.albumArtStatusFunc = nil
-	}()
-
-	// Call the actual MusicBrainz fetch
-	return app.fetchAlbumArtFromMusicBrainz(album)
-}
-
-// showAlbumArtResult displays the final results of album art scanning
-func (app *MiyooPod) showAlbumArtResult(title string, fetched, failed, total int) {
-	dc := app.DC
-
-	dc.SetHexColor(app.CurrentTheme.BG)
-	dc.Clear()
-
-	// Header
-	app.drawHeader("Fetch Album Art")
-
-	yPos := SCREEN_HEIGHT/2 - 80
-
-	// Title
-	dc.SetFontFace(app.FontMenu)
-	dc.SetHexColor(app.CurrentTheme.ItemTxt)
-	dc.DrawStringAnchored(title, SCREEN_WIDTH/2, float64(yPos), 0.5, 0.5)
-	yPos += 60
-
-	// Results
-	dc.SetFontFace(app.FontArtist)
-	dc.SetHexColor(app.CurrentTheme.ItemTxt)
-
-	if total > 0 {
-		dc.DrawStringAnchored(fmt.Sprintf("✓ Fetched: %d", fetched), SCREEN_WIDTH/2, float64(yPos), 0.5, 0.5)
-		yPos += 30
-
-		if failed > 0 {
-			dc.SetHexColor(app.CurrentTheme.Dim)
-			dc.DrawStringAnchored(fmt.Sprintf("✗ Failed: %d", failed), SCREEN_WIDTH/2, float64(yPos), 0.5, 0.5)
-			yPos += 30
-		}
-
-		stillMissing := total - fetched
-		if stillMissing > 0 {
-			dc.SetHexColor(app.CurrentTheme.Dim)
-			dc.DrawStringAnchored(fmt.Sprintf("Still missing: %d", stillMissing), SCREEN_WIDTH/2, float64(yPos), 0.5, 0.5)
-		}
-	}
-
-	// Instructions
-	dc.SetFontFace(app.FontSmall)
-	dc.SetHexColor(app.CurrentTheme.Dim)
-
-	stillMissing := total - fetched
-	if stillMissing > 0 {
-		dc.DrawStringAnchored("Press A to retry • Press B to return", SCREEN_WIDTH/2, SCREEN_HEIGHT-40, 0.5, 0.5)
-	} else {
-		dc.DrawStringAnchored("Press B to return", SCREEN_WIDTH/2, SCREEN_HEIGHT-40, 0.5, 0.5)
-	}
-
-	app.triggerRefresh()
-
-	// Wait for button press
-	app.waitForAlbumArtExit(stillMissing)
-}
-
-// waitForAlbumArtExit waits for user to press B to exit album art results
-func (app *MiyooPod) waitForAlbumArtExit(stillMissing int) {
-	for app.Running {
-		key := Key(C_GetKeyPress())
-		if key == NONE {
-			time.Sleep(33 * time.Millisecond)
-			continue
-		}
-
-		if key == B || key == MENU {
-			// Return to menu
-			app.setScreen(ScreenMenu)
-			app.drawMenuScreen()
-			return
-		}
-
-		if key == A && stillMissing > 0 {
-			// Retry scanning
-			app.scanAlbumArt()
-			return
-		}
-	}
+	return float64(width) / 64.0
 }

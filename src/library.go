@@ -17,10 +17,32 @@ import (
 	"github.com/fogleman/gg"
 )
 
-// ScanLibrary walks the music directory and builds the library index
-func (app *MiyooPod) ScanLibrary() {
+// startLibraryScan launches a background library scan, switching to the scan screen.
+// The onComplete callback (if non-nil) is called when the scan finishes.
+func (app *MiyooPod) startLibraryScan(onComplete func()) {
+	if app.LibScanRunning {
+		return
+	}
+
+	app.LibScanRunning = true
+	app.LibScanDone = false
+	app.LibScanCount = 0
+	app.LibScanFolder = ""
+	app.LibScanStatus = "Starting scan..."
+	app.LibScanElapsed = ""
+	app.LibScanPhase = "scanning"
+
+	app.setScreen(ScreenLibraryScan)
+	app.drawCurrentScreen()
+
+	go app.runLibraryScan(onComplete)
+}
+
+// runLibraryScan is the background goroutine that performs the actual library scan.
+// IMPORTANT: Never call draw functions from here — only update state and requestRedraw.
+func (app *MiyooPod) runLibraryScan(onComplete func()) {
 	start := time.Now()
-	logMsg("Scanning music library...")
+	logMsg("INFO: Scanning music library...")
 
 	app.Library = &Library{
 		TracksByPath:  make(map[string]*Track),
@@ -29,14 +51,13 @@ func (app *MiyooPod) ScanLibrary() {
 	}
 
 	fileCount := 0
-	currentFolder := ""
 
 	filepath.Walk(MUSIC_ROOT, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
+		if err != nil || !app.Running {
 			return nil
 		}
 		if info.IsDir() {
-			currentFolder = path
+			app.LibScanFolder = path
 			return nil
 		}
 
@@ -45,10 +66,11 @@ func (app *MiyooPod) ScanLibrary() {
 		case ".mp3":
 			app.scanTrack(path)
 			fileCount++
+			app.LibScanCount = fileCount
 
-			// Update scanning progress display every 5 files
 			if fileCount%5 == 0 {
-				app.showScanningProgress(fileCount, currentFolder)
+				app.LibScanStatus = fmt.Sprintf("Found %d songs...", fileCount)
+				app.requestRedraw()
 			}
 
 		case ".m3u", ".m3u8":
@@ -61,22 +83,20 @@ func (app *MiyooPod) ScanLibrary() {
 		return nil
 	})
 
-	// Sort tracks by title
+	// Sort phase
+	app.LibScanPhase = "sorting"
+	app.LibScanStatus = "Sorting library..."
+	app.requestRedraw()
+
 	sort.Slice(app.Library.Tracks, func(i, j int) bool {
 		return strings.ToLower(app.Library.Tracks[i].Title) < strings.ToLower(app.Library.Tracks[j].Title)
 	})
-
-	// Sort albums by name
 	sort.Slice(app.Library.Albums, func(i, j int) bool {
 		return strings.ToLower(app.Library.Albums[i].Name) < strings.ToLower(app.Library.Albums[j].Name)
 	})
-
-	// Sort artists by name
 	sort.Slice(app.Library.Artists, func(i, j int) bool {
 		return strings.ToLower(app.Library.Artists[i].Name) < strings.ToLower(app.Library.Artists[j].Name)
 	})
-
-	// Sort tracks within each album by disc/track number
 	for _, album := range app.Library.Albums {
 		sort.Slice(album.Tracks, func(i, j int) bool {
 			if album.Tracks[i].DiscNum != album.Tracks[j].DiscNum {
@@ -85,8 +105,6 @@ func (app *MiyooPod) ScanLibrary() {
 			return album.Tracks[i].TrackNum < album.Tracks[j].TrackNum
 		})
 	}
-
-	// Sort albums within each artist
 	for _, artist := range app.Library.Artists {
 		sort.Slice(artist.Albums, func(i, j int) bool {
 			return strings.ToLower(artist.Albums[i].Name) < strings.ToLower(artist.Albums[j].Name)
@@ -98,19 +116,39 @@ func (app *MiyooPod) ScanLibrary() {
 		app.parsePlaylist(pl)
 	}
 
-	// Decode album art images
-	decodeStart := time.Now()
+	// Decode album art
+	app.LibScanPhase = "decoding"
+	app.LibScanStatus = "Decoding album art..."
+	app.requestRedraw()
+
 	app.decodeAlbumArt()
-	logMsg(fmt.Sprintf("decodeAlbumArt took: %v", time.Since(decodeStart)))
 
-	logMsg(fmt.Sprintf("Library scan complete: %d tracks, %d albums, %d artists, %d playlists",
-		len(app.Library.Tracks), len(app.Library.Albums), len(app.Library.Artists), len(app.Library.Playlists)))
-	logMsg(fmt.Sprintf("ScanLibrary total took: %v", time.Since(start)))
+	// Save to JSON
+	app.LibScanPhase = "saving"
+	app.LibScanStatus = "Saving library..."
+	app.requestRedraw()
 
-	// Save library to JSON
 	if err := app.saveLibraryJSON(); err != nil {
 		logMsg(fmt.Sprintf("WARNING: Failed to save library: %v", err))
 	}
+
+	elapsed := time.Since(start)
+	app.LibScanElapsed = elapsed.Truncate(time.Second).String()
+	app.LibScanStatus = fmt.Sprintf("%d tracks, %d albums, %d artists",
+		len(app.Library.Tracks), len(app.Library.Albums), len(app.Library.Artists))
+
+	logMsg(fmt.Sprintf("INFO: Library scan complete: %d tracks, %d albums, %d artists, %d playlists",
+		len(app.Library.Tracks), len(app.Library.Albums), len(app.Library.Artists), len(app.Library.Playlists)))
+
+	app.LibScanRunning = false
+
+	// Call onComplete before marking done — ensures menu is rebuilt before user can navigate away
+	if onComplete != nil {
+		onComplete()
+	}
+
+	app.LibScanDone = true
+	app.requestRedraw()
 }
 
 // scanTrack reads metadata from a single audio file
@@ -274,7 +312,7 @@ func (app *MiyooPod) decodeArtwork(artData []byte, artExt string) image.Image {
 	reader := bytes.NewReader(artData)
 	img, _, err := image.Decode(reader)
 	if err != nil {
-		logMsg(fmt.Sprintf("Failed to decode artwork: %v", err))
+		logMsg(fmt.Sprintf("WARNING: Failed to decode artwork: %v", err))
 		return nil
 	}
 
@@ -286,147 +324,336 @@ func (app *MiyooPod) decodeArtwork(artData []byte, artExt string) image.Image {
 func (app *MiyooPod) decodeAlbumArt() {
 	start := time.Now()
 
-	// Pre-cache only the center size (280px) - the only size actually used
-	// COVER_SIDE_SIZE and COVER_FAR_SIZE are unused (coverflow feature not implemented)
-	sizes := []int{COVER_CENTER_SIZE}
-
+	size := COVER_CENTER_SIZE
 	successCount := 0
 	failCount := 0
 	noArtCount := 0
-
-	// OPTIMIZATION: Only decode artwork for albums that will be displayed immediately
-	// to reduce startup time and memory usage. Other artwork will be decoded on-demand.
-	// For now, just decode the first 20 albums to speed up initial menu display.
-	maxPreCache := 20
-	decodedCount := 0
+	rgbaCacheHits := 0
 
 	for i, album := range app.Library.Albums {
-		// Skip pre-caching after first 20 albums to save memory
-		if decodedCount >= maxPreCache {
-			logMsg(fmt.Sprintf("[ART] Skipping pre-cache for remaining %d albums (will decode on-demand)",
-				len(app.Library.Albums)-i))
-			break
-		}
+		key := fmt.Sprintf("%s|%s_%d", album.Artist, album.Name, size)
 
-		if album.ArtData == nil {
-			// Try loading from disk if path is set
-			if album.ArtPath != "" {
-				if err := app.loadAlbumArtwork(album); err != nil {
-					noArtCount++
-					logMsg(fmt.Sprintf("[ART] Album %d/%d: %s - %s | Failed to load from disk: %v",
-						i+1, len(app.Library.Albums), album.Artist, album.Name, err))
-					continue
-				}
-			} else {
-				noArtCount++
-				logMsg(fmt.Sprintf("[ART] Album %d/%d: %s - %s | No art data available",
-					i+1, len(app.Library.Albums), album.Artist, album.Name))
+		// Fast path: check for pre-resized RGBA pixel cache
+		rgbaPath := app.rgbaCachePath(album)
+		if rgbaPath != "" {
+			if img := app.loadRGBACache(rgbaPath, size); img != nil {
+				app.Coverflow.CoverCache[key] = img
+				album.ArtData = nil
+				album.ArtImg = nil
+				rgbaCacheHits++
+				successCount++
 				continue
 			}
 		}
 
-		logMsg(fmt.Sprintf("[ART] Album %d/%d: %s - %s | Art data: %d bytes, ext: %s",
-			i+1, len(app.Library.Albums), album.Artist, album.Name, len(album.ArtData), album.ArtExt))
+		// No RGBA cache — need to decode from source image
+		if album.ArtData == nil {
+			if album.ArtPath != "" {
+				if err := app.loadAlbumArtwork(album); err != nil {
+					noArtCount++
+					continue
+				}
+			} else {
+				noArtCount++
+				continue
+			}
+		}
 
-		decodeStart := time.Now()
+		logMsg(fmt.Sprintf("[ART] Decoding %d/%d: %s - %s (%d bytes)",
+			i+1, len(app.Library.Albums), album.Artist, album.Name, len(album.ArtData)))
+
 		reader := bytes.NewReader(album.ArtData)
-		img, format, err := image.Decode(reader)
+		img, _, err := image.Decode(reader)
 		if err != nil {
 			failCount++
-			logMsg(fmt.Sprintf("[ART] ✗ FAILED to decode: %s - %s | Error: %v | Data size: %d bytes, ext: %s",
-				album.Artist, album.Name, err, len(album.ArtData), album.ArtExt))
-			// Log first few bytes to help diagnose format issues
-			if len(album.ArtData) > 0 {
-				previewLen := 16
-				if len(album.ArtData) < previewLen {
-					previewLen = len(album.ArtData)
-				}
-				logMsg(fmt.Sprintf("[ART]   First %d bytes: %v", previewLen, album.ArtData[:previewLen]))
-			}
+			logMsg(fmt.Sprintf("WARNING: Failed to decode art for %s - %s: %v", album.Artist, album.Name, err))
 			continue
 		}
-		decodeTime := time.Since(decodeStart)
 
 		successCount++
-		album.ArtImg = img
 
-		// Pre-cache ALL sizes (200px, 140px, 100px) to avoid resize during playback
+		// Resize to target size
 		srcBounds := img.Bounds()
-		logMsg(fmt.Sprintf("[ART] ✓ Decoded: %s - %s | Format: %s, Dimensions: %dx%d, Decode time: %v",
-			album.Artist, album.Name, format, srcBounds.Dx(), srcBounds.Dy(), decodeTime))
+		dc := gg.NewContext(size, size)
+		sx := float64(size) / float64(srcBounds.Dx())
+		sy := float64(size) / float64(srcBounds.Dy())
+		dc.Scale(sx, sy)
+		dc.DrawImage(img, 0, 0)
+		resized := dc.Image()
+		app.Coverflow.CoverCache[key] = resized
 
-		cacheStart := time.Now()
-		for _, size := range sizes {
-			key := fmt.Sprintf("%s|%s_%d", album.Artist, album.Name, size)
-			if _, exists := app.Coverflow.CoverCache[key]; !exists {
-				dc := gg.NewContext(size, size)
-				sx := float64(size) / float64(srcBounds.Dx())
-				sy := float64(size) / float64(srcBounds.Dy())
-				dc.Scale(sx, sy)
-				dc.DrawImage(img, 0, 0)
-				app.Coverflow.CoverCache[key] = dc.Image()
+		// Save RGBA cache for next startup
+		if rgbaPath != "" {
+			if rgba, ok := resized.(*image.RGBA); ok {
+				app.saveRGBACache(rgbaPath, rgba)
 			}
 		}
-		cacheTime := time.Since(cacheStart)
-		logMsg(fmt.Sprintf("[ART] ✓ Cached for: %s - %s | Cache time: %v",
-			album.Artist, album.Name, cacheTime))
 
-		// Free memory: clear both ArtData and ArtImg after caching
-		// We only need the cached 280px version, not the full decoded image
 		album.ArtData = nil
 		album.ArtImg = nil
-		decodedCount++
 	}
 
-	logMsg(fmt.Sprintf("[ART] Decode summary: %d succeeded, %d failed, %d no art, %d skipped | Total time: %v",
-		successCount, failCount, noArtCount, len(app.Library.Albums)-decodedCount, time.Since(start)))
+	logMsg(fmt.Sprintf("INFO: Album art: %d cached (%d RGBA fast), %d decoded, %d failed, %d no art | %v",
+		successCount, rgbaCacheHits, successCount-rgbaCacheHits, failCount, noArtCount, time.Since(start)))
 
-	// Generate default album art and pre-cache at center size only
-	defaultSizes := []int{COVER_CENTER_SIZE}
-	for _, size := range defaultSizes {
-		dc := gg.NewContext(size, size)
-		dc.SetHexColor("#333333")
-		dc.Clear()
-		dc.SetHexColor("#666666")
-		if app.FontSmall != nil {
-			dc.SetFontFace(app.FontSmall)
-			dc.DrawStringAnchored("No Art", float64(size)/2, float64(size)/2, 0.5, 0.5)
-		}
-		if size == COVER_CENTER_SIZE {
-			app.DefaultArt = dc.Image()
-		}
-		// Pre-cache the default art at this size so getCachedCover never resizes it
-		key := fmt.Sprintf("__default__%d", size)
-		app.Coverflow.CoverCache[key] = dc.Image()
+	// Generate default album art
+	dc := gg.NewContext(size, size)
+	dc.SetHexColor("#333333")
+	dc.Clear()
+	dc.SetHexColor("#666666")
+	if app.FontSmall != nil {
+		dc.SetFontFace(app.FontSmall)
+		dc.DrawStringAnchored("No Art", float64(size)/2, float64(size)/2, 0.5, 0.5)
+	}
+	app.DefaultArt = dc.Image()
+	app.Coverflow.CoverCache[fmt.Sprintf("__default__%d", size)] = dc.Image()
+}
+
+// rgbaCachePath returns the path for an album's pre-resized RGBA cache file, or "" if no art
+func (app *MiyooPod) rgbaCachePath(album *Album) string {
+	if album.ArtPath == "" && album.ArtData == nil {
+		return ""
+	}
+	hash := generateAlbumCacheKey(album.Artist, album.Name)
+	return fmt.Sprintf("%s%s_%d.rgba", ARTWORK_DIR, hash, COVER_CENTER_SIZE)
+}
+
+// loadRGBACache loads a pre-resized RGBA pixel buffer from disk
+func (app *MiyooPod) loadRGBACache(path string, size int) image.Image {
+	expectedSize := size * size * 4 // RGBA = 4 bytes per pixel
+	data, err := os.ReadFile(path)
+	if err != nil || len(data) != expectedSize {
+		return nil
+	}
+	img := &image.RGBA{
+		Pix:    data,
+		Stride: size * 4,
+		Rect:   image.Rect(0, 0, size, size),
+	}
+	return img
+}
+
+// saveRGBACache writes a pre-resized RGBA pixel buffer to disk
+func (app *MiyooPod) saveRGBACache(path string, img *image.RGBA) {
+	os.MkdirAll(ARTWORK_DIR, 0755)
+	if err := os.WriteFile(path, img.Pix, 0644); err != nil {
+		logMsg(fmt.Sprintf("WARNING: Failed to save RGBA cache: %v", err))
 	}
 }
 
-// showScanningProgress displays scanning status on screen
-func (app *MiyooPod) showScanningProgress(count int, currentPath string) {
+// deferredArtExtraction runs in background after startup to extract album art
+// from MP3 tags for albums that don't have cached artwork yet.
+func (app *MiyooPod) deferredArtExtraction() {
+	extracted := 0
+	for _, album := range app.Library.Albums {
+		// Skip albums that already have art (loaded from cache or RGBA)
+		if album.ArtData != nil || album.ArtPath != "" {
+			continue
+		}
+
+		// Try extracting from MP3 files
+		for _, track := range album.Tracks {
+			f, err := os.Open(track.Path)
+			if err != nil {
+				continue
+			}
+			m, err := tag.ReadFrom(f)
+			if err != nil {
+				f.Close()
+				continue
+			}
+			pic := m.Picture()
+			f.Close()
+			if pic == nil {
+				continue
+			}
+
+			album.ArtData = pic.Data
+			album.ArtExt = pic.Ext
+
+			// Save to disk for next time
+			if err := app.saveAlbumArtwork(album); err == nil {
+				// Also generate RGBA cache
+				rgbaPath := app.rgbaCachePath(album)
+				if rgbaPath != "" {
+					reader := bytes.NewReader(pic.Data)
+					if img, _, err := image.Decode(reader); err == nil {
+						size := COVER_CENTER_SIZE
+						dc := gg.NewContext(size, size)
+						srcBounds := img.Bounds()
+						dc.Scale(float64(size)/float64(srcBounds.Dx()), float64(size)/float64(srcBounds.Dy()))
+						dc.DrawImage(img, 0, 0)
+						resized := dc.Image()
+
+						key := fmt.Sprintf("%s|%s_%d", album.Artist, album.Name, size)
+						app.Coverflow.CoverCache[key] = resized
+
+						if rgba, ok := resized.(*image.RGBA); ok {
+							app.saveRGBACache(rgbaPath, rgba)
+						}
+					}
+				}
+			}
+
+			album.ArtData = nil
+			extracted++
+			app.requestRedraw()
+			break // Got art for this album
+		}
+	}
+
+	if extracted > 0 {
+		logMsg(fmt.Sprintf("INFO: Background art extraction: found art for %d albums", extracted))
+		app.NPCacheDirty = true
+		app.requestRedraw()
+	}
+}
+
+// drawLibraryScanScreen renders the library scan progress screen.
+// Called from drawCurrentScreen on the main thread only.
+func (app *MiyooPod) drawLibraryScanScreen() {
 	dc := app.DC
 
 	dc.SetHexColor(app.CurrentTheme.BG)
 	dc.Clear()
 
-	dc.SetFontFace(app.FontTitle)
-	dc.SetHexColor(app.CurrentTheme.HeaderTxt)
-	dc.DrawStringAnchored("Scanning Library", SCREEN_WIDTH/2, SCREEN_HEIGHT/2-60, 0.5, 0.5)
+	app.drawHeader("Scanning Library")
 
+	if app.LibScanDone {
+		app.drawLibraryScanResults()
+		return
+	}
+
+	y := MENU_TOP_Y
+
+	// Row 1: Track count
 	dc.SetFontFace(app.FontMenu)
 	dc.SetHexColor(app.CurrentTheme.ItemTxt)
-	dc.DrawStringAnchored(fmt.Sprintf("%d songs found", count), SCREEN_WIDTH/2, SCREEN_HEIGHT/2, 0.5, 0.5)
+	textY := float64(y) + float64(MENU_ITEM_HEIGHT)/2
+	dc.DrawStringAnchored(
+		fmt.Sprintf("%d songs found", app.LibScanCount),
+		float64(MENU_LEFT_PAD), textY, 0, 0.5,
+	)
+	y += MENU_ITEM_HEIGHT
 
-	dc.SetFontFace(app.FontSmall)
-	dc.SetHexColor(app.CurrentTheme.Dim)
+	// Row 2: Current folder (highlighted like selected menu item)
+	if app.LibScanFolder != "" {
+		dc.SetHexColor(app.CurrentTheme.SelBG)
+		dc.DrawRectangle(0, float64(y), SCREEN_WIDTH, MENU_ITEM_HEIGHT)
+		dc.Fill()
 
-	// Truncate long paths to fit on screen
-	displayPath := currentPath
-	if len(displayPath) > 60 {
-		displayPath = "..." + displayPath[len(displayPath)-57:]
+		dc.SetFontFace(app.FontSmall)
+		dc.SetHexColor(app.CurrentTheme.SelTxt)
+		displayPath := app.LibScanFolder
+		if len(displayPath) > 60 {
+			displayPath = "..." + displayPath[len(displayPath)-57:]
+		}
+		textY = float64(y) + float64(MENU_ITEM_HEIGHT)/2
+		dc.DrawStringAnchored(displayPath, float64(MENU_LEFT_PAD), textY, 0, 0.5)
+		y += MENU_ITEM_HEIGHT
 	}
-	dc.DrawStringAnchored(displayPath, SCREEN_WIDTH/2, SCREEN_HEIGHT/2+40, 0.5, 0.5)
 
-	app.triggerRefresh()
+	// Row 3: Status/phase
+	if app.LibScanStatus != "" {
+		dc.SetFontFace(app.FontSmall)
+		dc.SetHexColor(app.CurrentTheme.Dim)
+		textY = float64(y) + float64(MENU_ITEM_HEIGHT)/2
+		dc.DrawStringAnchored(app.LibScanStatus, float64(MENU_LEFT_PAD), textY, 0, 0.5)
+	}
+}
+
+// drawLibraryScanResults renders the results after library scan is complete.
+func (app *MiyooPod) drawLibraryScanResults() {
+	dc := app.DC
+	y := MENU_TOP_Y
+
+	// Row 1: Completion message
+	dc.SetFontFace(app.FontMenu)
+	dc.SetHexColor(app.CurrentTheme.ItemTxt)
+	textY := float64(y) + float64(MENU_ITEM_HEIGHT)/2
+	title := "Scan complete"
+	if app.LibScanElapsed != "" {
+		title = fmt.Sprintf("Scan complete in %s", app.LibScanElapsed)
+	}
+	dc.DrawStringAnchored(title, float64(MENU_LEFT_PAD), textY, 0, 0.5)
+	y += MENU_ITEM_HEIGHT
+
+	// Separator
+	dc.SetHexColor(app.CurrentTheme.ProgBG)
+	dc.DrawRectangle(float64(MENU_LEFT_PAD), float64(y), float64(SCREEN_WIDTH-MENU_LEFT_PAD-MENU_RIGHT_PAD), 1)
+	dc.Fill()
+	y += 8
+
+	if app.Library != nil {
+		// Tracks
+		dc.SetFontFace(app.FontMenu)
+		dc.SetHexColor(app.CurrentTheme.ItemTxt)
+		textY = float64(y) + float64(MENU_ITEM_HEIGHT)/2
+		dc.DrawStringAnchored("Tracks", float64(MENU_LEFT_PAD), textY, 0, 0.5)
+		dc.SetHexColor(app.CurrentTheme.Accent)
+		dc.DrawStringAnchored(fmt.Sprintf("%d", len(app.Library.Tracks)), float64(SCREEN_WIDTH-MENU_RIGHT_PAD), textY, 1, 0.5)
+		y += MENU_ITEM_HEIGHT
+
+		// Albums
+		dc.SetFontFace(app.FontMenu)
+		dc.SetHexColor(app.CurrentTheme.ItemTxt)
+		textY = float64(y) + float64(MENU_ITEM_HEIGHT)/2
+		dc.DrawStringAnchored("Albums", float64(MENU_LEFT_PAD), textY, 0, 0.5)
+		dc.SetHexColor(app.CurrentTheme.Accent)
+		dc.DrawStringAnchored(fmt.Sprintf("%d", len(app.Library.Albums)), float64(SCREEN_WIDTH-MENU_RIGHT_PAD), textY, 1, 0.5)
+		y += MENU_ITEM_HEIGHT
+
+		// Artists
+		dc.SetFontFace(app.FontMenu)
+		dc.SetHexColor(app.CurrentTheme.ItemTxt)
+		textY = float64(y) + float64(MENU_ITEM_HEIGHT)/2
+		dc.DrawStringAnchored("Artists", float64(MENU_LEFT_PAD), textY, 0, 0.5)
+		dc.SetHexColor(app.CurrentTheme.Accent)
+		dc.DrawStringAnchored(fmt.Sprintf("%d", len(app.Library.Artists)), float64(SCREEN_WIDTH-MENU_RIGHT_PAD), textY, 1, 0.5)
+		y += MENU_ITEM_HEIGHT
+
+		// Playlists
+		if len(app.Library.Playlists) > 0 {
+			dc.SetFontFace(app.FontMenu)
+			dc.SetHexColor(app.CurrentTheme.ItemTxt)
+			textY = float64(y) + float64(MENU_ITEM_HEIGHT)/2
+			dc.DrawStringAnchored("Playlists", float64(MENU_LEFT_PAD), textY, 0, 0.5)
+			dc.SetHexColor(app.CurrentTheme.Accent)
+			dc.DrawStringAnchored(fmt.Sprintf("%d", len(app.Library.Playlists)), float64(SCREEN_WIDTH-MENU_RIGHT_PAD), textY, 1, 0.5)
+		}
+	}
+}
+
+// drawLibraryScanStatusBar renders the status bar for the library scan screen.
+func (app *MiyooPod) drawLibraryScanStatusBar() {
+	dc := app.DC
+
+	barY := float64(SCREEN_HEIGHT - STATUS_BAR_HEIGHT)
+
+	dc.SetHexColor(app.CurrentTheme.HeaderBG)
+	dc.DrawRectangle(0, barY, SCREEN_WIDTH, STATUS_BAR_HEIGHT)
+	dc.Fill()
+
+	centerY := barY + float64(STATUS_BAR_HEIGHT)/2
+
+	if app.LibScanDone {
+		app.drawButtonLegend(12, centerY, "B", "Back")
+	} else {
+		app.drawButtonLegend(12, centerY, "", "Scanning...")
+	}
+}
+
+// handleLibraryScanKey handles key input on the library scan screen.
+func (app *MiyooPod) handleLibraryScanKey(key Key) {
+	switch key {
+	case B, MENU:
+		if app.LibScanDone {
+			app.LibScanDone = false
+			app.setScreen(ScreenMenu)
+			app.drawCurrentScreen()
+		}
+		// Don't allow cancelling during scan — library state would be inconsistent
+	}
 }
 
 // saveLibraryJSON writes the library to a JSON file
@@ -511,56 +738,9 @@ func (app *MiyooPod) loadLibraryJSON() error {
 		}
 	}
 
-	// Re-extract album art for ALL albums (ArtData is not saved in JSON)
-	for _, album := range lib.Albums {
-		// First, try to load from saved artwork file
-		if album.ArtPath != "" {
-			if err := app.loadAlbumArtwork(album); err == nil {
-				logMsg(fmt.Sprintf("Loaded saved artwork for: %s - %s (%s)", album.Artist, album.Name, album.ArtPath))
-				continue // Successfully loaded from disk, skip extraction
-			} else {
-				logMsg(fmt.Sprintf("Failed to load saved artwork: %s - %s (%v)", album.Artist, album.Name, err))
-				// Fall through to try extracting from MP3
-			}
-		}
-
-		// Extract from MP3 files
-		logMsg(fmt.Sprintf("Extracting art for album: %s - %s (%d tracks)", album.Artist, album.Name, len(album.Tracks)))
-		// Try ALL tracks in this album to find art (don't rely on has_art flag)
-		for i, track := range album.Tracks {
-			if f, err := os.Open(track.Path); err == nil {
-				if m, err := tag.ReadFrom(f); err == nil {
-					if pic := m.Picture(); pic != nil {
-						album.ArtData = pic.Data
-						album.ArtExt = pic.Ext
-						logMsg(fmt.Sprintf("  ✓ Found art in track %d: %s (size: %d bytes, ext: %s, type: %s)", i+1, filepath.Base(track.Path), len(pic.Data), pic.Ext, pic.MIMEType))
-
-						// Save to disk to avoid re-extraction next time
-						if err := app.saveAlbumArtwork(album); err != nil {
-							logMsg(fmt.Sprintf("  Warning: Failed to save artwork to disk: %v", err))
-						}
-
-						// Update the track's has_art flag if we found art
-						if !track.HasArt {
-							track.HasArt = true
-						}
-						f.Close()
-						break // Got art for this album, move to next album
-					} else {
-						logMsg(fmt.Sprintf("  - Track %d: %s - no picture data | Tag format: %T, FileType: %s", i+1, filepath.Base(track.Path), m, m.FileType()))
-					}
-				} else {
-					logMsg(fmt.Sprintf("  - Track %d: %s - tag read error: %v", i+1, filepath.Base(track.Path), err))
-				}
-				f.Close()
-			} else {
-				logMsg(fmt.Sprintf("  - Track %d: %s - file open error: %v", i+1, track.Path, err))
-			}
-		}
-		if album.ArtData == nil {
-			logMsg(fmt.Sprintf("  ✗ No art found for album: %s - %s", album.Artist, album.Name))
-		}
-	}
+	// Artwork loading is handled by decodeAlbumArt() which checks RGBA pixel cache first
+	// (fast file read), falling back to raw image decode only when needed.
+	// MP3 art extraction for albums without any cached art is deferred to background.
 
 	// Rebuild artist-album relationships
 	for _, album := range lib.Albums {
@@ -587,7 +767,7 @@ func (app *MiyooPod) loadLibraryJSON() error {
 	// Decode album art
 	app.decodeAlbumArt()
 
-	logMsg(fmt.Sprintf("INFO: Library losaded from JSON: %d tracks, %d albums, %d artists, %d playlists in %v",
+	logMsg(fmt.Sprintf("INFO: Library loaded from JSON: %d tracks, %d albums, %d artists, %d playlists in %v",
 		len(lib.Tracks), len(lib.Albums), len(lib.Artists), len(lib.Playlists), time.Since(start)))
 
 	return nil

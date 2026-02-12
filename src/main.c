@@ -46,7 +46,7 @@ void c_logd(const char *fmt, int val) {
 int pollEvents() {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
-        if (event.type == SDL_KEYDOWN) {
+        if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
             return event.key.keysym.sym;
         }
         // Return negative value for key release (to distinguish from key press)

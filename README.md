@@ -12,11 +12,14 @@ This is the first release of MiyooPod. While functional, it may contain bugs and
 
 - iPod-inspired user interface with multiple themes
 - Browse by Artists, Albums, and Songs
-- Album art display
-- Automatic album artwork fetching from MusicBrainz
+- Search/filter lists with on-screen A-Z keyboard
+- Album art display with automatic fetching from MusicBrainz
 - Shuffle and repeat modes
+- Seek/fast-forward/rewind with accelerating speed
+- Over-the-air updates
+- Session persistence (queue, position, shuffle/repeat restored on launch)
 - Native 640×480 resolution optimized for Miyoo Mini
-- 11 customizable themes (Classic iPod, Dark Blue, Nord, Cyberpunk, and more)
+- 17 customizable themes (Classic iPod, Dark Blue, Nord, Cyberpunk, and more)
 
 ## Installation
 
@@ -68,9 +71,12 @@ For albums without embedded artwork, MiyooPod can automatically fetch album cove
 
 ## Settings
 
-- **Themes** - Choose from 11 visual themes (Classic iPod, Dark, Dark Blue, Light, Nord, Solarized Dark, Matrix Green, Retro Amber, Purple Haze, Cyberpunk, Coffee)
+- **Themes** - Choose from 17 visual themes (Classic iPod, Dark, Dark Blue, Light, Nord, Solarized Dark, Matrix Green, Retro Amber, Purple Haze, Cyberpunk, Coffee, Ocean, Forest, Sunset, Neon, Midnight, Gruvbox, Candy)
 - **Lock Key** - Customize which button locks/unlocks the screen (Y, X, or SELECT). The Miyoo Mini Plus doesn't support suspend mode natively, so the lock key prevents accidental presses during playback
 - **Fetch Album Art** - Automatically download missing album artwork from MusicBrainz
+- **Check for Updates** - Manually check for and install OTA updates
+- **Update Notifications** - Toggle automatic update prompts on/off
+- **Clear App Data** - Reset library cache, settings, and artwork
 - **Toggle Logs** - Enable or disable debug logging
 - **Rescan Library** - Force a complete rescan of your music library
 - **About** - View app version and check for updates
@@ -108,6 +114,25 @@ make go
 The build process uses CGO to compile Go source with C bindings and bundles all required shared libraries.
 
 ## Changelog
+
+### Version 0.0.5
+- 🔄 Over-the-air updates with download progress, checksum verification, and automatic rollback on failure
+- 🔍 Search: filter Artists, Albums, and Songs with an on-screen A-Z keyboard (press SELECT on any list)
+- ⏩ Seek/fast-forward/rewind: hold L or R on the Now Playing screen with accelerating speed
+- 💾 Session persistence: queue, playback position, shuffle/repeat state, and current track restored across launches
+- 📜 Header marquee: now-playing track info scrolls in the header bar when browsing menus
+- 🛡️ Crash reporting: fatal panics and C-level signals are logged and reported automatically
+- 🗑️ Clear App Data option in Settings to reset library cache, settings, and artwork
+- ⚡ Faster startup: version check no longer blocks splash screen; album art uses fast RGBA pixel cache on disk
+- 🔄 Non-blocking library scan with dedicated progress screen showing track count, current folder, and phase
+- 🖼️ Non-blocking album art fetch with progress bar, percentage, and cancel/retry support
+- 🔊 Volume and brightness persisted across app launches
+- 🖼️ Background album art extraction from MP3 tags after startup
+- 🔔 Toggle update notifications on/off from Settings
+- 🔍 Manual "Check for Updates" option in Settings
+- 🐛 Fixed race conditions where background goroutines corrupted the framebuffer causing panics
+- 🐛 Fixed volume/brightness overlay screen flash caused by partial framebuffer updates
+- 🐛 Fixed volume resetting on every launch
 
 ### Version 0.0.4
 - 🔊 Fixed volume control using MI_AO ioctl (correct indirect buffer layout matching Onion/keymon)

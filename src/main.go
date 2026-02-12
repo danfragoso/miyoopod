@@ -38,20 +38,20 @@ func (app *MiyooPod) Init() {
 	// Initialize PostHog client early so C logs during SDL init are captured
 	app.initSentry()
 
-	logMsg("Initializing MiyooPod...")
-	logMsg("SDL init...")
+	logMsg("INFO: Initializing MiyooPod...")
+	logMsg("INFO: SDL init...")
 	if C.init() != 0 {
 		logMsg("FATAL: SDL init failed!")
 		return
 	}
-	logMsg("SDL init ok!")
+	logMsg("INFO: SDL init ok!")
 
 	// Init audio
-	logMsg("Audio init...")
+	logMsg("INFO: Audio init...")
 	if C.audio_init() != 0 {
 		logMsg("WARNING: Failed to init SDL2_mixer audio")
 	} else {
-		logMsg("Audio init ok!")
+		logMsg("INFO: Audio init ok!")
 	}
 
 	// Create render context at native resolution (640x480)
@@ -74,18 +74,24 @@ func (app *MiyooPod) Init() {
 	}
 	app.TextMeasureCache = make(map[string]float64)
 	app.RefreshChan = make(chan struct{}, 1)
+	app.RedrawChan = make(chan struct{}, 1)
 	app.LockKey = Y // Default lock key
 
 	// Power management defaults
 	app.AutoLockMinutes = 3 // Auto-lock after 3 minutes of inactivity
 	app.ScreenPeekEnabled = true
+	app.UpdateNotifications = true // Default: show update prompts
 	app.LastActivityTime = time.Now()
 
 	// Pre-render digit sprites for fast time display (bypass gg in hot path)
 	app.initDigitSprites(app.FontTime)
 
-	// Set initial volume (scale 0-100 to 0-128)
-	audioSetVolume(int(app.Playing.Volume))
+	// Default volume/brightness (overridden by loadSettings if saved)
+	app.SystemVolume = 50
+	app.SystemBrightness = 50
+
+	// Always max SDL2_mixer volume — MI_AO controls actual hardware volume
+	audioSetVolume(100)
 
 	// Load settings (theme and lock key) before showing splash - fast parse
 	if err := app.loadSettings(); err != nil {
@@ -95,12 +101,12 @@ func (app *MiyooPod) Init() {
 	// Draw splash screen with logo (now using restored theme if available)
 	app.drawLogoSplash()
 
-	// Check for updates in background
-	versionStatus := app.checkVersion()
-	app.drawLogoSplashWithVersion(versionStatus)
-
-	// Give user time to see version status
-	time.Sleep(1500 * time.Millisecond)
+	// Check for updates asynchronously (don't block startup)
+	app.VersionCheckDone = make(chan struct{})
+	go func() {
+		app.checkVersion()
+		close(app.VersionCheckDone)
+	}()
 
 	// Start power button monitor (reads directly from /dev/input/event0)
 	app.startPowerButtonMonitor()
@@ -149,6 +155,15 @@ func (app *MiyooPod) triggerRefresh() {
 	}
 }
 
+// requestRedraw signals the main loop to call drawCurrentScreen on the next iteration.
+// Safe to call from any goroutine. Non-blocking.
+func (app *MiyooPod) requestRedraw() {
+	select {
+	case app.RedrawChan <- struct{}{}:
+	default:
+	}
+}
+
 func createApp() *MiyooPod {
 	return &MiyooPod{
 		Running: true,
@@ -157,19 +172,30 @@ func createApp() *MiyooPod {
 }
 
 func main() {
-	// Global panic recovery to log crashes before app dies
+	// Global panic recovery — sends crash report synchronously before dying
 	defer func() {
 		if r := recover(); r != nil {
-			logMsg(fmt.Sprintf("FATAL: Application crashed with panic: %v", r))
-			// Log stack trace
-			buf := make([]byte, 4096)
-			n := runtime.Stack(buf, false)
-			logMsg(fmt.Sprintf("FATAL: Stack trace:\n%s", string(buf[:n])))
-			// Give time for logs to write
-			time.Sleep(1 * time.Second)
+			panicMsg := fmt.Sprintf("%v", r)
+			buf := make([]byte, 16384)
+			n := runtime.Stack(buf, true)
+			stackTrace := string(buf[:n])
+
+			// Log locally
+			logMsg(fmt.Sprintf("FATAL: Application crashed with panic: %s", panicMsg))
+			logMsg(fmt.Sprintf("FATAL: Stack trace:\n%s", stackTrace))
+			if logFile != nil {
+				logFile.Sync()
+			}
+
+			// Send crash report synchronously — blocks until HTTP completes
+			sendCrashReport("go_panic", panicMsg, stackTrace)
+
 			panic(r) // Re-panic to show error
 		}
 	}()
+
+	// Install signal handlers for C-level crashes (SIGSEGV, SIGABRT, SIGBUS)
+	installCrashHandler()
 
 	logMsg("\n\n\n-----------")
 	logMsg("INFO: MiyooPod started!")
@@ -178,15 +204,46 @@ func main() {
 	app.Init()
 
 	go app.RunUI()
-	time.Sleep(1 * time.Second)
+	time.Sleep(100 * time.Millisecond)
 
 	// Load library from JSON or perform full scan
 	err := app.loadLibraryJSON()
 	if err != nil {
 		logMsg(fmt.Sprintf("WARNING: Could not load library from JSON: %v", err))
-		logMsg("Performing full library scan...")
-		app.ScanLibrary()
+		logMsg("INFO: Performing full library scan...")
+
+		// Launch scan as background goroutine with UI — wait for completion via channel
+		scanDone := make(chan struct{})
+		app.startLibraryScan(func() {
+			close(scanDone)
+		})
+
+		// Wait for scan to complete (main loop continues polling keys/redraws)
+		for {
+			select {
+			case <-scanDone:
+				goto scanFinished
+			case <-app.RedrawChan:
+				app.drawCurrentScreen()
+			default:
+			}
+			// Poll SDL events so the scan screen renders
+			keyEvent := C_GetKeyPress()
+			if keyEvent != -1 {
+				if keyEvent < 0 {
+					keyReleased := Key(-keyEvent - 1)
+					app.handleKeyRelease(keyReleased)
+				} else {
+					app.handleKey(Key(keyEvent))
+				}
+			}
+			time.Sleep(33 * time.Millisecond)
+		}
+	scanFinished:
 	}
+
+	// Restore saved playback state (queue, position) before building menu
+	app.restorePlaybackState()
 
 	// Build menu
 	app.RootMenu = app.buildRootMenu()
@@ -194,6 +251,9 @@ func main() {
 
 	// Start playback poller
 	go app.startPlaybackPoller()
+
+	// Extract album art from MP3s for albums without cached art (background)
+	go app.deferredArtExtraction()
 
 	// Start inactivity monitor for auto-lock
 	go app.startInactivityMonitor()
@@ -203,6 +263,17 @@ func main() {
 
 	// Draw initial menu
 	app.drawCurrentScreen()
+
+	// Check for update status from a previous OTA update
+	app.handleUpdateStatus()
+
+	// Wait for async version check to complete, then show update prompt if needed
+	go func() {
+		<-app.VersionCheckDone
+		if app.UpdateAvailable && app.UpdateNotifications && app.Running {
+			app.showUpdatePrompt()
+		}
+	}()
 
 	// Main loop: poll SDL events on main thread (required by SDL2)
 	// SDL_PollEvent MUST run on the thread that called SDL_Init (LockOSThread in init)
@@ -221,8 +292,19 @@ func main() {
 				app.handleKey(Key(keyEvent))
 			}
 		}
+		app.pollSeek()
+		app.pollMarquee()
+		// Check if a background goroutine requested a redraw (non-blocking)
+		select {
+		case <-app.RedrawChan:
+			app.drawCurrentScreen()
+		default:
+		}
 		time.Sleep(33 * time.Millisecond) // ~30Hz polling, main thread sleeps most of the time
 	}
+
+	// Save playback state before exit
+	app.savePlaybackState()
 
 	// Track app closed
 	TrackAppLifecycle("app_closed", nil)
@@ -230,8 +312,7 @@ func main() {
 	// Cleanup: close refresh channel to unblock RunUI goroutine
 	close(app.RefreshChan)
 
-	C.audio_quit()
-	C.quit()
+	sdlCleanup()
 }
 
 // setScreen changes the current screen and tracks the page view
@@ -249,13 +330,30 @@ func (app *MiyooPod) setScreenWithContext(screen ScreenType, properties map[stri
 
 // handleKeyRelease handles key release events
 func (app *MiyooPod) handleKeyRelease(key Key) {
-	// Currently no key release handling needed for SDL keys
-	// Power button is handled directly in input.go
+	// Handle seek release on Now Playing screen
+	if (key == L || key == R) && app.SeekHeld {
+		direction := app.seekKeyReleased()
+		if direction != 0 {
+			// Was a short tap — do prev/next track
+			if direction < 0 {
+				app.prevTrack()
+			} else {
+				app.nextTrack()
+			}
+			app.drawCurrentScreen()
+		}
+		return
+	}
 }
 
 func (app *MiyooPod) handleKey(key Key) {
 	// Update last activity time for any key press
 	app.LastActivityTime = time.Now()
+
+	// If update prompt is showing, it consumes all keys
+	if app.handleUpdatePromptKey(key) {
+		return
+	}
 
 	// If locked, handle peek or unlock
 	if app.Locked {
@@ -289,24 +387,62 @@ func (app *MiyooPod) handleKey(key Key) {
 		// Fall through to normal key handling
 	}
 
+	// If search panel is active, it consumes most keys
+	if app.SearchActive && app.handleSearchKey(key) {
+		return
+	}
+
 	// Global keys (work from any screen)
 	switch key {
 	case START:
-		// Go to Now Playing screen
+		// Go to Now Playing screen (not allowed during library scan or album art fetch)
+		if app.CurrentScreen == ScreenLibraryScan || app.CurrentScreen == ScreenAlbumArt {
+			return
+		}
 		if app.Playing != nil && app.Playing.Track != nil {
+			if app.SearchActive {
+				app.cancelSearch()
+			}
 			app.setScreen(ScreenNowPlaying)
 			app.drawCurrentScreen()
 		}
 		return
 	case L:
+		if app.CurrentScreen == ScreenLibraryScan || app.CurrentScreen == ScreenAlbumArt {
+			return
+		}
+		if app.CurrentScreen == ScreenNowPlaying && app.Playing != nil && app.Playing.State != StateStopped {
+			app.seekKeyPressed(-1)
+			return
+		}
 		app.prevTrack()
 		app.drawCurrentScreen()
 		return
 	case R:
+		if app.CurrentScreen == ScreenLibraryScan || app.CurrentScreen == ScreenAlbumArt {
+			return
+		}
+		if app.CurrentScreen == ScreenNowPlaying && app.Playing != nil && app.Playing.State != StateStopped {
+			app.seekKeyPressed(1)
+			return
+		}
 		app.nextTrack()
 		app.drawCurrentScreen()
 		return
 	case SELECT:
+		if app.CurrentScreen == ScreenLibraryScan || app.CurrentScreen == ScreenAlbumArt {
+			return
+		}
+		// On queue screen, SELECT clears queue (handled by handleQueueKey)
+		if app.CurrentScreen == ScreenQueue {
+			break // Fall through to screen-specific handler
+		}
+		// On searchable menu screens, toggle search instead of shuffle
+		if app.CurrentScreen == ScreenMenu && app.isSearchableMenu() {
+			app.toggleSearch()
+			app.drawCurrentScreen()
+			return
+		}
 		app.toggleShuffle()
 		app.drawCurrentScreen()
 		return
@@ -320,6 +456,10 @@ func (app *MiyooPod) handleKey(key Key) {
 		app.handleNowPlayingKey(key)
 	case ScreenQueue:
 		app.handleQueueKey(key)
+	case ScreenAlbumArt:
+		app.handleAlbumArtKey(key)
+	case ScreenLibraryScan:
+		app.handleLibraryScanKey(key)
 	}
 }
 
@@ -356,6 +496,12 @@ func (app *MiyooPod) drawCurrentScreen() {
 	case ScreenQueue:
 		app.drawQueueScreen()
 		app.drawStatusBar()
+	case ScreenAlbumArt:
+		app.drawAlbumArtScreen()
+		app.drawAlbumArtStatusBar()
+	case ScreenLibraryScan:
+		app.drawLibraryScanScreen()
+		app.drawLibraryScanStatusBar()
 	}
 
 	// Draw lock overlay if locked
@@ -370,6 +516,13 @@ func (app *MiyooPod) drawCurrentScreen() {
 
 	// Draw error popup overlay if active
 	app.drawErrorPopup()
+
+	// Draw update prompt overlay if showing
+	if app.ShowingUpdatePrompt {
+		app.drawUpdatePromptOverlay()
+		// drawUpdatePromptOverlay calls triggerRefresh, so skip the one below
+		return
+	}
 
 	app.triggerRefresh()
 }
@@ -424,6 +577,11 @@ func audioPlay() error {
 
 func audioStop() {
 	C.audio_stop()
+}
+
+func sdlCleanup() {
+	C.audio_quit()
+	C.quit()
 }
 
 func audioTogglePause() {

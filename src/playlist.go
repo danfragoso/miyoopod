@@ -11,7 +11,7 @@ import (
 func (app *MiyooPod) parsePlaylist(pl *Playlist) {
 	data, err := os.ReadFile(pl.Path)
 	if err != nil {
-		logMsg("Failed to read playlist " + pl.Path + ": " + err.Error())
+		logMsg("ERROR: Failed to read playlist " + pl.Path + ": " + err.Error())
 		return
 	}
 

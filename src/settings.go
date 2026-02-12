@@ -16,8 +16,11 @@ type Settings struct {
 	LockKey          string `json:"lock_key,omitempty"`
 	LocalLogsEnabled bool   `json:"local_logs_enabled,omitempty"`
 	SentryEnabled    bool   `json:"sentry_enabled,omitempty"`
-	AutoLockMinutes  *int   `json:"auto_lock_minutes,omitempty"`
-	ScreenPeekEnabled *bool `json:"screen_peek_enabled,omitempty"`
+	AutoLockMinutes     *int   `json:"auto_lock_minutes,omitempty"`
+	ScreenPeekEnabled   *bool  `json:"screen_peek_enabled,omitempty"`
+	UpdateNotifications *bool  `json:"update_notifications,omitempty"`
+	Volume              *int   `json:"volume,omitempty"`
+	Brightness          *int   `json:"brightness,omitempty"`
 }
 
 // loadSettings loads theme and lock key preferences from a lightweight JSON file
@@ -35,7 +38,7 @@ func (app *MiyooPod) loadSettings() error {
 	// Generate installation ID if it doesn't exist
 	if settings.InstallationID == "" {
 		settings.InstallationID = uuid.New().String()
-		logMsg(fmt.Sprintf("Generated new installation ID: %s", settings.InstallationID))
+		logMsg(fmt.Sprintf("INFO: Generated new installation ID: %s", settings.InstallationID))
 		// Save immediately
 		app.InstallationID = settings.InstallationID
 		app.saveSettings()
@@ -105,19 +108,46 @@ func (app *MiyooPod) loadSettings() error {
 		}
 	}
 
+	// Restore update notifications preference (default to true if not set)
+	if settings.UpdateNotifications != nil {
+		app.UpdateNotifications = *settings.UpdateNotifications
+		if app.UpdateNotifications {
+			logMsg("Update notifications enabled")
+		} else {
+			logMsg("Update notifications disabled")
+		}
+	}
+
+	// Restore volume (default 50 if not set)
+	if settings.Volume != nil {
+		app.SystemVolume = *settings.Volume
+		setMiAOVolume(app.SystemVolume)
+		logMsg(fmt.Sprintf("INFO: Restored volume: %d%%", app.SystemVolume))
+	}
+
+	// Restore brightness (default to current if not set)
+	if settings.Brightness != nil {
+		app.SystemBrightness = *settings.Brightness
+		setBrightness(app.SystemBrightness)
+		logMsg(fmt.Sprintf("INFO: Restored brightness: %d%%", app.SystemBrightness))
+	}
+
 	return nil
 }
 
 // saveSettings saves current theme and lock key preferences
 func (app *MiyooPod) saveSettings() error {
 	settings := Settings{
-		InstallationID:   app.InstallationID,
-		Theme:            app.CurrentTheme.Name,
-		LockKey:          app.getLockKeyName(),
-		LocalLogsEnabled: app.LocalLogsEnabled,
-		SentryEnabled:    app.SentryEnabled,
-		AutoLockMinutes:   &app.AutoLockMinutes,
-		ScreenPeekEnabled: &app.ScreenPeekEnabled,
+		InstallationID:      app.InstallationID,
+		Theme:               app.CurrentTheme.Name,
+		LockKey:             app.getLockKeyName(),
+		LocalLogsEnabled:    app.LocalLogsEnabled,
+		SentryEnabled:       app.SentryEnabled,
+		AutoLockMinutes:     &app.AutoLockMinutes,
+		ScreenPeekEnabled:   &app.ScreenPeekEnabled,
+		UpdateNotifications: &app.UpdateNotifications,
+		Volume:              &app.SystemVolume,
+		Brightness:          &app.SystemBrightness,
 	}
 
 	data, err := json.MarshalIndent(settings, "", "  ")

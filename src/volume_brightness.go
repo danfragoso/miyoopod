@@ -7,27 +7,34 @@ import (
 
 // adjustVolume changes system volume and shows overlay
 func (app *MiyooPod) adjustVolume(delta int) {
-	currentVolume := app.OverlayValue // Use overlay value for system volume
-	newVolume := clamp(currentVolume+delta, 0, 100)
+	newVolume := clamp(app.SystemVolume+delta, 0, 100)
 
 	// Always max SDL2_mixer volume
 	audioSetVolume(100)
 
 	// Set MI_AO system volume
 	setMiAOVolume(newVolume)
+	app.SystemVolume = newVolume
 
 	app.showOverlay("volume", newVolume)
+
+	// Persist to settings
+	go app.saveSettings()
 
 	logMsg(fmt.Sprintf("Volume: %d%%", newVolume))
 }
 
 // adjustBrightness changes screen brightness and shows overlay
 func (app *MiyooPod) adjustBrightness(delta int) {
-	currentBrightness := getBrightness()
-	newBrightness := clamp(currentBrightness+delta, 10, 100) // Min 10% so screen stays visible
+	newBrightness := clamp(app.SystemBrightness+delta, 10, 100) // Min 10% so screen stays visible
 
 	setBrightness(newBrightness)
+	app.SystemBrightness = newBrightness
+
 	app.showOverlay("brightness", newBrightness)
+
+	// Persist to settings
+	go app.saveSettings()
 
 	logMsg(fmt.Sprintf("Brightness: %d%%", newBrightness))
 }
@@ -43,13 +50,13 @@ func (app *MiyooPod) showOverlay(overlayType string, value int) {
 	app.OverlayValue = value
 	app.OverlayVisible = true
 
-	// Redraw screen with overlay
-	app.drawCurrentScreen()
+	// Signal main loop to redraw (non-blocking to avoid deadlock)
+	app.requestRedraw()
 
 	// Hide after 2 seconds
 	app.OverlayTimer = time.AfterFunc(2*time.Second, func() {
 		app.OverlayVisible = false
-		app.drawCurrentScreen()
+		app.requestRedraw()
 	})
 }
 

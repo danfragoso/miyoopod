@@ -302,6 +302,57 @@ const (
 	PROGRESS_REGION_Y1 = PROGRESS_BAR_Y + PROGRESS_BAR_H + 4 // below bar
 )
 
+// blitMarqueeWindow blits a horizontal sliding window from a pre-rendered strip
+// onto the framebuffer, wrapping around seamlessly. Only non-transparent pixels
+// are drawn (tinted with tr,tg,tb), so the header background shows through.
+func (app *MiyooPod) blitMarqueeWindow(dstX, dstY, windowW int, strip *image.RGBA, offset int, tr, tg, tb uint8) {
+	fb := app.FB
+	fbBounds := fb.Rect
+	stripW := strip.Rect.Dx()
+	stripH := strip.Rect.Dy()
+
+	if stripW <= 0 || windowW <= 0 {
+		return
+	}
+
+	for sy := 0; sy < stripH; sy++ {
+		fy := dstY + sy
+		if fy < fbBounds.Min.Y || fy >= fbBounds.Max.Y {
+			continue
+		}
+		for wx := 0; wx < windowW; wx++ {
+			fx := dstX + wx
+			if fx < fbBounds.Min.X || fx >= fbBounds.Max.X {
+				continue
+			}
+
+			// Source x wraps around the strip
+			sx := (offset + wx) % stripW
+
+			srcOff := sy*strip.Stride + sx*4
+			alpha := strip.Pix[srcOff+3]
+			if alpha == 0 {
+				continue
+			}
+
+			dstOff := fy*fb.Stride + fx*4
+			if alpha == 255 {
+				fb.Pix[dstOff] = tr
+				fb.Pix[dstOff+1] = tg
+				fb.Pix[dstOff+2] = tb
+				fb.Pix[dstOff+3] = 255
+			} else {
+				sa := uint16(alpha)
+				da := uint16(255 - alpha)
+				fb.Pix[dstOff] = uint8((uint16(tr)*sa + uint16(fb.Pix[dstOff])*da) / 255)
+				fb.Pix[dstOff+1] = uint8((uint16(tg)*sa + uint16(fb.Pix[dstOff+1])*da) / 255)
+				fb.Pix[dstOff+2] = uint8((uint16(tb)*sa + uint16(fb.Pix[dstOff+2])*da) / 255)
+				fb.Pix[dstOff+3] = 255
+			}
+		}
+	}
+}
+
 // parseColor is a helper that returns color.RGBA from hex
 func parseColor(hex string) color.RGBA {
 	r, g, b, a := parseHexColor(hex)

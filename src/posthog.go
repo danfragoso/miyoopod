@@ -90,9 +90,9 @@ func (app *MiyooPod) initSentry() {
 	}
 
 	if posthogClient.Enabled {
-		logMsg("PostHog client initialized and enabled")
+		logMsg("INFO: PostHog client initialized and enabled")
 	} else {
-		logMsg("PostHog client initialized but disabled")
+		logMsg("INFO: PostHog client initialized but disabled")
 	}
 }
 
@@ -327,6 +327,159 @@ func sendErrorToPostHog(level, message string, extra map[string]interface{}) err
 	}
 
 	return nil
+}
+
+// sendCrashReport sends a crash report synchronously and blocks until complete.
+// Used during panic recovery and signal handling — must complete before process exits.
+// Returns error for logging but the caller should not depend on success.
+func sendCrashReport(crashType, message, stackTrace string) {
+	if posthogClient == nil || !posthogClient.Enabled || POSTHOG_TOKEN == "" {
+		return
+	}
+
+	// Always log to file first (most reliable)
+	if logFile != nil {
+		logFile.WriteString(fmt.Sprintf("CRASH REPORT: %s: %s\n%s\n", crashType, message, stackTrace))
+		logFile.Sync()
+	}
+
+	// Build exception with real stack trace
+	exceptionList := []map[string]interface{}{
+		{
+			"type":  crashType,
+			"value": message,
+			"mechanism": map[string]interface{}{
+				"handled":   false,
+				"synthetic": false,
+			},
+			"stacktrace": map[string]interface{}{
+				"type":   "raw",
+				"frames": parseCrashFrames(stackTrace),
+			},
+		},
+	}
+
+	installID := "unknown"
+	deviceModel := "miyoo-mini-plus"
+	displayW := 0
+	displayH := 0
+	if globalApp != nil {
+		if globalApp.InstallationID != "" {
+			installID = globalApp.InstallationID
+		}
+		if globalApp.DeviceModel != "" {
+			deviceModel = globalApp.DeviceModel
+		}
+		displayW = globalApp.DisplayWidth
+		displayH = globalApp.DisplayHeight
+	}
+
+	properties := map[string]interface{}{
+		"distinct_id":        installID,
+		"$exception_list":    exceptionList,
+		"$exception_message": message,
+		"$exception_level":   "fatal",
+		"$exception_type":    crashType,
+		"version":            APP_VERSION,
+		"device":             deviceModel,
+		"display_width":      displayW,
+		"display_height":     displayH,
+		"crash_type":         crashType,
+		"stack_trace":        stackTrace,
+	}
+
+	// Add current screen context if available
+	if globalApp != nil {
+		properties["screen"] = globalApp.CurrentScreen.String()
+		if globalApp.CurrentTheme.Name != "" {
+			properties["theme"] = globalApp.CurrentTheme.Name
+		}
+		if globalApp.Playing != nil && globalApp.Playing.Track != nil {
+			properties["playing_track"] = globalApp.Playing.Track.Title
+			properties["playing_artist"] = globalApp.Playing.Track.Artist
+		}
+	}
+
+	event := map[string]interface{}{
+		"api_key":    POSTHOG_TOKEN,
+		"event":      "$exception",
+		"properties": properties,
+	}
+
+	eventJSON, err := json.Marshal(event)
+	if err != nil {
+		if logFile != nil {
+			logFile.WriteString(fmt.Sprintf("CRASH REPORT: Failed to marshal: %v\n", err))
+		}
+		return
+	}
+
+	// Synchronous HTTP request with generous timeout
+	url := "https://us.i.posthog.com/i/v0/e/"
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(eventJSON))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		if logFile != nil {
+			logFile.WriteString(fmt.Sprintf("CRASH REPORT: Send failed: %v\n", err))
+		}
+		return
+	}
+	resp.Body.Close()
+
+	if logFile != nil {
+		logFile.WriteString(fmt.Sprintf("CRASH REPORT: Sent successfully (status %d)\n", resp.StatusCode))
+		logFile.Sync()
+	}
+}
+
+// parseCrashFrames extracts stack frames from a Go stack trace string
+func parseCrashFrames(stackTrace string) []map[string]interface{} {
+	frames := []map[string]interface{}{}
+	lines := strings.Split(stackTrace, "\n")
+
+	for i := 0; i < len(lines)-1; i += 2 {
+		funcLine := strings.TrimSpace(lines[i])
+		if funcLine == "" || strings.HasPrefix(funcLine, "goroutine") {
+			continue
+		}
+
+		frame := map[string]interface{}{
+			"platform": "custom",
+			"lang":     "go",
+			"function": funcLine,
+		}
+
+		// Next line has file:line info
+		if i+1 < len(lines) {
+			fileLine := strings.TrimSpace(lines[i+1])
+			frame["filename"] = fileLine
+		}
+
+		frames = append(frames, frame)
+	}
+
+	if len(frames) == 0 {
+		frames = append(frames, map[string]interface{}{
+			"platform": "custom",
+			"lang":     "go",
+			"function": "unknown",
+			"module":   "miyoopod",
+		})
+	}
+
+	return frames
 }
 
 // Helper functions for logging different levels

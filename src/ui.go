@@ -2,12 +2,14 @@ package main
 
 import (
 	"fmt"
+	"image"
 	"math"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/fogleman/gg"
 	"golang.org/x/image/font"
 )
 
@@ -31,19 +33,151 @@ func (app *MiyooPod) drawHeader(title string) {
 		dc.DrawStringAnchored(fmt.Sprintf("%d%%", batteryPercent), 40, HEADER_HEIGHT/2, 0, 0.5)
 	}
 
-	// Header title
+	// Available space after battery area
+	titleX := 85.0 // After battery icon + percentage (e.g. "100%")
+	if getBatteryLevel() < 0 {
+		titleX = 12.0
+	}
+	availableW := float64(SCREEN_WIDTH) - titleX - 8 // 8px right margin
+
+	// Don't show now playing info in header when already on the Now Playing screen
+	hasNowPlaying := app.CurrentScreen != ScreenNowPlaying &&
+		app.Playing != nil && app.Playing.Track != nil && app.Playing.State != StateStopped
+
+	// Split available space: 70% title, 30% now playing (with gap)
+	titleMaxW := availableW
+	if hasNowPlaying {
+		titleMaxW = availableW * 0.68
+	}
+
+	// Draw title (left-aligned, truncated to its zone)
 	dc.SetFontFace(app.FontHeader)
 	dc.SetHexColor(app.CurrentTheme.HeaderTxt)
-	dc.DrawStringAnchored(title, SCREEN_WIDTH/2, HEADER_HEIGHT/2, 0.5, 0.5)
+	displayTitle := app.truncateText(title, titleMaxW, app.FontHeader)
+	dc.DrawStringAnchored(displayTitle, titleX, HEADER_HEIGHT/2, 0, 0.5)
 
-	// Play state indicator in top-right
-	if app.Playing != nil && app.Playing.State == StatePlaying {
-		dc.SetHexColor(app.CurrentTheme.Accent)
-		app.drawPlayIcon(SCREEN_WIDTH-30, 10, 20)
-	} else if app.Playing != nil && app.Playing.State == StatePaused {
-		dc.SetHexColor(app.CurrentTheme.Dim)
-		app.drawPauseIcon(SCREEN_WIDTH-30, 10, 20)
+	// Right side: play state icon + now playing track info (marquee)
+	if hasNowPlaying {
+		iconSize := 14
+		iconY := int(HEADER_HEIGHT/2) - iconSize/2
+		gap := 12.0 // gap between title zone and now playing zone
+		npX := titleX + titleMaxW + gap
+		npW := float64(SCREEN_WIDTH) - 8 - npX // right-aligned zone
+
+		// Play/pause icon at start of now-playing zone
+		if app.Playing.State == StatePlaying {
+			dc.SetHexColor(app.CurrentTheme.Accent)
+			app.drawPlayIcon(int(npX), iconY, iconSize)
+		} else {
+			dc.SetHexColor(app.CurrentTheme.Dim)
+			app.drawPauseIcon(int(npX), iconY, iconSize)
+		}
+
+		textX := npX + float64(iconSize) + 4
+		textW := npW - float64(iconSize) - 4
+
+		// Now playing text — marquee if it overflows
+		info := app.Playing.Track.Artist + " - " + app.Playing.Track.Title
+		dc.SetFontFace(app.FontSmall)
+		infoFullW := app.measureTextCached(info, app.FontSmall)
+
+		if infoFullW <= textW {
+			// Fits — draw normally, no marquee needed
+			if info != app.MarqueeText {
+				app.MarqueeText = info
+				app.MarqueeBuf = nil
+			}
+			dc.SetHexColor(app.CurrentTheme.HeaderTxt)
+			dc.DrawStringAnchored(info, textX, HEADER_HEIGHT/2, 0, 0.5)
+		} else {
+			// Pre-render the full marquee strip once when text changes
+			if info != app.MarqueeText {
+				app.MarqueeText = info
+				app.MarqueeOffset = 0
+				app.MarqueeTime = time.Now()
+				app.MarqueePauseUntil = time.Now().Add(1500 * time.Millisecond)
+
+				spacer := "       "
+				dc.SetFontFace(app.FontSmall)
+				spacerW := app.measureTextCached(spacer, app.FontSmall)
+				stripW := int(infoFullW + spacerW)
+				stripH := int(HEADER_HEIGHT)
+				if stripW < 1 {
+					stripW = 1
+				}
+				app.MarqueeBufW = stripW
+
+				// Render full strip (white on transparent) — done once per track
+				offDC := gg.NewContext(stripW, stripH)
+				offDC.SetFontFace(app.FontSmall)
+				offDC.SetRGBA(1, 1, 1, 1)
+				offDC.DrawStringAnchored(info+spacer, 0, float64(stripH)/2, 0, 0.5)
+
+				offImg := offDC.Image()
+				if rgba, ok := offImg.(*image.RGBA); ok {
+					app.MarqueeBuf = rgba
+				} else {
+					// Fallback: convert to RGBA
+					bounds := offImg.Bounds()
+					buf := image.NewRGBA(bounds)
+					for py := bounds.Min.Y; py < bounds.Max.Y; py++ {
+						for px := bounds.Min.X; px < bounds.Max.X; px++ {
+							buf.Set(px, py, offImg.At(px, py))
+						}
+					}
+					app.MarqueeBuf = buf
+				}
+			}
+
+			if app.MarqueeBuf != nil && app.MarqueeBufW > 0 {
+				// Save blit coordinates for pollMarquee partial updates
+				app.MarqueeDstX = int(textX)
+				app.MarqueeDstW = int(textW)
+				tr, tg, tb, _ := parseHexColor(app.CurrentTheme.HeaderTxt)
+				app.MarqueeColor = [3]uint8{tr, tg, tb}
+
+				// Advance and blit
+				app.advanceMarquee()
+				app.blitMarqueeWindow(app.MarqueeDstX, 0, app.MarqueeDstW, app.MarqueeBuf, int(app.MarqueeOffset), tr, tg, tb)
+			}
+		}
 	}
+}
+
+// advanceMarquee updates the marquee scroll offset based on elapsed time.
+func (app *MiyooPod) advanceMarquee() {
+	now := time.Now()
+	if now.After(app.MarqueePauseUntil) {
+		elapsed := now.Sub(app.MarqueeTime).Seconds()
+		if elapsed > 0.2 {
+			elapsed = 0.033
+		}
+		app.MarqueeOffset += 60 * elapsed // 60px/s
+
+		if app.MarqueeOffset >= float64(app.MarqueeBufW) {
+			app.MarqueeOffset = 0
+			app.MarqueePauseUntil = now.Add(1500 * time.Millisecond)
+		}
+	}
+	app.MarqueeTime = now
+}
+
+// pollMarquee does a partial framebuffer update for the marquee text area.
+// Called from the main loop at ~30Hz. Only updates when marquee is actively scrolling.
+func (app *MiyooPod) pollMarquee() {
+	if app.MarqueeBuf == nil || app.CurrentScreen != ScreenMenu || app.MarqueeDstW <= 0 || app.Locked || app.OverlayVisible {
+		return
+	}
+
+	// Clear the marquee text region with header background color
+	bgR, bgG, bgB, _ := parseHexColor(app.CurrentTheme.HeaderBG)
+	app.fastFillRect(app.MarqueeDstX, 0, app.MarqueeDstW, int(HEADER_HEIGHT), bgR, bgG, bgB, 255)
+
+	// Advance and blit the marquee
+	app.advanceMarquee()
+	app.blitMarqueeWindow(app.MarqueeDstX, 0, app.MarqueeDstW, app.MarqueeBuf, int(app.MarqueeOffset), app.MarqueeColor[0], app.MarqueeColor[1], app.MarqueeColor[2])
+
+	app.triggerRefresh()
 }
 
 // drawMenuItem draws a single menu row
@@ -224,56 +358,40 @@ func (app *MiyooPod) drawPrevIcon(x, y, size int) {
 	dc.Fill()
 }
 
-// drawShuffleIcon draws a shuffle icon (crossed curved arrows)
+// drawShuffleIcon draws a shuffle icon (two crossing arrows)
 func (app *MiyooPod) drawShuffleIcon(x, y, size int) {
 	dc := app.DC
 	fx := float64(x)
 	fy := float64(y)
 	fs := float64(size)
 
-	// Scale factor from 24x24 SVG viewBox
 	scale := fs / 24.0
-
 	dc.SetLineWidth(2)
 
-	// Top curved path (left to right upper)
-	dc.MoveTo(fx+3*scale, fy+6*scale)
-	dc.CubicTo(
-		fx+6*scale, fy+6*scale,
-		fx+8*scale, fy+3*scale,
-		fx+12*scale, fy+6*scale,
-	)
-	dc.CubicTo(
-		fx+15*scale, fy+8.5*scale,
-		fx+16*scale, fy+6*scale,
-		fx+18*scale, fy+6*scale,
-	)
+	// Path from top-left → crosses to bottom-right → arrow
+	dc.MoveTo(fx+2*scale, fy+7*scale)
+	dc.LineTo(fx+10*scale, fy+7*scale)
+	dc.LineTo(fx+14*scale, fy+17*scale)
+	dc.LineTo(fx+20*scale, fy+17*scale)
 	dc.Stroke()
 
-	// Top arrow head (pointing right and down)
-	dc.MoveTo(fx+18*scale, fy+3*scale)
-	dc.LineTo(fx+21*scale, fy+6*scale)
-	dc.LineTo(fx+18*scale, fy+9*scale)
+	// Path from bottom-left → crosses to top-right → arrow
+	dc.MoveTo(fx+2*scale, fy+17*scale)
+	dc.LineTo(fx+10*scale, fy+17*scale)
+	dc.LineTo(fx+14*scale, fy+7*scale)
+	dc.LineTo(fx+20*scale, fy+7*scale)
 	dc.Stroke()
 
-	// Bottom curved path (left to right lower, crossing)
-	dc.MoveTo(fx+3*scale, fy+18*scale)
-	dc.CubicTo(
-		fx+6*scale, fy+18*scale,
-		fx+8*scale, fy+21*scale,
-		fx+12*scale, fy+18*scale,
-	)
-	dc.CubicTo(
-		fx+15*scale, fy+15.5*scale,
-		fx+16*scale, fy+18*scale,
-		fx+18*scale, fy+18*scale,
-	)
+	// Top-right arrowhead
+	dc.MoveTo(fx+17*scale, fy+4*scale)
+	dc.LineTo(fx+21*scale, fy+7*scale)
+	dc.LineTo(fx+17*scale, fy+10*scale)
 	dc.Stroke()
 
-	// Bottom arrow head (pointing right and up)
-	dc.MoveTo(fx+18*scale, fy+15*scale)
-	dc.LineTo(fx+21*scale, fy+18*scale)
-	dc.LineTo(fx+18*scale, fy+21*scale)
+	// Bottom-right arrowhead
+	dc.MoveTo(fx+17*scale, fy+14*scale)
+	dc.LineTo(fx+21*scale, fy+17*scale)
+	dc.LineTo(fx+17*scale, fy+20*scale)
 	dc.Stroke()
 }
 
@@ -556,21 +674,28 @@ func (app *MiyooPod) drawStatusBar() {
 	// Left side: context-sensitive button legend
 	switch app.CurrentScreen {
 	case ScreenMenu:
-		app.drawButtonLegend(12, centerY, "A", "Select")
-		app.drawButtonLegend(130, centerY, "B", "Back")
-		if app.Playing != nil && app.Playing.State != StateStopped {
-			app.drawButtonLegend(235, centerY, "START", "Now Playing")
-		}
-		// Show "Add to Queue" if viewing tracks, albums, or artists
-		if len(app.MenuStack) > 0 {
-			current := app.MenuStack[len(app.MenuStack)-1]
-			if len(current.Items) > 0 {
-				firstItem := current.Items[0]
-				// Show Y hint for tracks, albums, or artists
-				if firstItem.Track != nil || firstItem.Album != nil || firstItem.Artist != nil {
-					// Only show if nothing is playing to avoid overlap
-					if app.Playing == nil || app.Playing.State == StateStopped {
-						app.drawButtonLegend(360, centerY, "Y", "Add to Q")
+		if app.SearchActive {
+			app.drawButtonLegend(12, centerY, "A", "Add Char")
+			app.drawButtonLegend(140, centerY, "X", "Delete")
+			app.drawButtonLegend(250, centerY, "B", "Close")
+		} else {
+			app.drawButtonLegend(12, centerY, "A", "Select")
+			app.drawButtonLegend(130, centerY, "B", "Back")
+			if app.Playing != nil && app.Playing.State != StateStopped {
+				app.drawButtonLegend(235, centerY, "START", "Now Playing")
+			}
+			// Show search hint and "Add to Queue" on searchable lists
+			if app.isSearchableMenu() {
+				app.drawButtonLegend(480, centerY, "SEL", "Search")
+			}
+			if len(app.MenuStack) > 0 {
+				current := app.MenuStack[len(app.MenuStack)-1]
+				if len(current.Items) > 0 {
+					firstItem := current.Items[0]
+					if firstItem.Track != nil || firstItem.Album != nil || firstItem.Artist != nil {
+						if app.Playing == nil || app.Playing.State == StateStopped {
+							app.drawButtonLegend(360, centerY, "Y", "Add to Q")
+						}
 					}
 				}
 			}
@@ -587,29 +712,6 @@ func (app *MiyooPod) drawStatusBar() {
 		app.drawButtonLegend(320, centerY, "SELECT", "Clear All")
 	}
 
-	// Right side: now playing mini status (only on menu screen)
-	if app.CurrentScreen == ScreenMenu && app.Playing != nil && app.Playing.Track != nil && app.Playing.State != StateStopped {
-		track := app.Playing.Track
-
-		// Play/pause icon
-		iconX := 430
-		iconY := int(centerY) - 6
-		if app.Playing.State == StatePlaying {
-			dc.SetHexColor(app.CurrentTheme.Accent)
-			app.drawPlayIcon(iconX, iconY, 12)
-		} else {
-			dc.SetHexColor(app.CurrentTheme.Dim)
-			app.drawPauseIcon(iconX, iconY, 12)
-		}
-
-		// Track info (truncated)
-		dc.SetFontFace(app.FontSmall)
-		dc.SetHexColor(app.CurrentTheme.HeaderTxt)
-		info := track.Artist + " - " + track.Title
-		maxW := float64(SCREEN_WIDTH - iconX - 30)
-		info = app.truncateText(info, maxW, app.FontSmall)
-		dc.DrawStringAnchored(info, float64(iconX+18), centerY, 0, 0.5)
-	}
 }
 
 // drawButtonLegend draws a single button label like "[A] Select"

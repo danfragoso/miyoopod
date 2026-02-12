@@ -62,7 +62,7 @@ func (app *MiyooPod) fetchAlbumArtFromMusicBrainz(album *Album) bool {
 	// Step 1: Search for releases
 	releaseIDs, err := searchMusicBrainzRelease(album.Artist, album.Name)
 	if err != nil {
-		logMsg(fmt.Sprintf("[MUSICBRAINZ] Search failed: %v", err))
+		logMsg(fmt.Sprintf("WARNING: [MUSICBRAINZ] Search failed: %v", err))
 		return false
 	}
 
@@ -118,7 +118,7 @@ func (app *MiyooPod) fetchAlbumArtFromMusicBrainz(album *Album) bool {
 
 		artData, mimeType, err = downscaleImage(artData, mimeType, 200)
 		if err != nil {
-			logMsg(fmt.Sprintf("[MUSICBRAINZ] Failed to process image: %v", err))
+			logMsg(fmt.Sprintf("WARNING: [MUSICBRAINZ] Failed to process image: %v", err))
 			continue // Try next release
 		}
 
@@ -136,7 +136,7 @@ func (app *MiyooPod) fetchAlbumArtFromMusicBrainz(album *Album) bool {
 
 		// Save artwork to disk to persist across restarts and save RAM
 		if err := app.saveAlbumArtwork(album); err != nil {
-			logMsg(fmt.Sprintf("[MUSICBRAINZ] Warning: Failed to save artwork to disk: %v", err))
+			logMsg(fmt.Sprintf("WARNING: [MUSICBRAINZ] Failed to save artwork to disk: %v", err))
 			// Continue anyway, art is still in memory
 		}
 

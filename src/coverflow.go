@@ -44,15 +44,23 @@ func (app *MiyooPod) getCachedCover(album *Album, size int) image.Image {
 		return cached
 	}
 
+	// Fast path: try RGBA pixel cache from disk
+	rgbaPath := app.rgbaCachePath(album)
+	if rgbaPath != "" {
+		if img := app.loadRGBACache(rgbaPath, size); img != nil {
+			app.Coverflow.CoverCache[key] = img
+			return img
+		}
+	}
+
 	if album.ArtImg == nil {
 		// Try loading from disk if we have a saved path
 		if album.ArtPath != "" {
 			if err := app.loadAlbumArtwork(album); err == nil {
-				// Decode the loaded artwork
 				reader := bytes.NewReader(album.ArtData)
 				if img, _, err := image.Decode(reader); err == nil {
 					album.ArtImg = img
-					album.ArtData = nil // Free memory immediately
+					album.ArtData = nil
 				}
 			}
 		}
@@ -68,7 +76,7 @@ func (app *MiyooPod) getCachedCover(album *Album, size int) image.Image {
 		}
 	}
 
-	// Fallback: resize on demand (should not happen if startup pre-caching is correct)
+	// Fallback: resize on demand
 	dc := gg.NewContext(size, size)
 	srcBounds := album.ArtImg.Bounds()
 	sx := float64(size) / float64(srcBounds.Dx())
@@ -78,5 +86,14 @@ func (app *MiyooPod) getCachedCover(album *Album, size int) image.Image {
 
 	result := dc.Image()
 	app.Coverflow.CoverCache[key] = result
+
+	// Save RGBA cache for next startup
+	if rgbaPath != "" {
+		if rgba, ok := result.(*image.RGBA); ok {
+			app.saveRGBACache(rgbaPath, rgba)
+		}
+	}
+
+	album.ArtImg = nil
 	return result
 }

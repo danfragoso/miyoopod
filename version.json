@@ -1,3 +1,7 @@
 {
-    "version": "0.0.4"
+    "version": "0.0.5",
+    "checksum": "sha256:58e98194e8b5c1abc99b6bb71b026fa44c6b1940dac35538532b4e3fb33ee633",
+    "url": "https://github.com/danfragoso/miyoopod/raw/refs/heads/main/releases/MiyooPod.zip",
+    "size": 20023130,
+    "changelog": "OTA Updates, Search, Seek/fast-forward/rewind, session persistence, header redisign, more robust crash recovering/reporting, new settings, faster startup, non-blocking library scan, a ton of bug fixes"
 }

@@ -37,7 +37,7 @@ func (app *MiyooPod) startInactivityMonitor() {
 			autoLockDuration := time.Duration(app.AutoLockMinutes) * time.Minute
 
 			if inactiveDuration >= autoLockDuration {
-				logMsg(fmt.Sprintf("Auto-lock triggered after %v of inactivity", inactiveDuration))
+				logMsg(fmt.Sprintf("INFO: Auto-lock triggered after %v of inactivity", inactiveDuration))
 				app.toggleLock()
 			}
 		}
@@ -64,7 +64,7 @@ func (app *MiyooPod) monitorPowerButtonHold() {
 
 			// Force shutdown after 5 seconds
 			if holdDuration >= 5*time.Second {
-				logMsg("Power button held for 5+ seconds - forcing shutdown")
+				logMsg("INFO: Power button held for 5+ seconds - forcing shutdown")
 
 				// Restore brightness before exiting
 				restoreBrightness()

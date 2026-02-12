@@ -72,7 +72,7 @@ func (app *MiyooPod) playCurrentQueueTrack() {
 
 	err := app.mpvLoadFile(track.Path)
 	if err != nil {
-		logMsg(fmt.Sprintf("Failed to load: %v", err))
+		logMsg(fmt.Sprintf("ERROR: Failed to load: %v", err))
 		app.Playing.State = StateStopped
 		app.Playing.Track = nil // Clear track on failure
 		app.showError(fmt.Sprintf("Failed to load audio\n%s", err.Error()))
@@ -83,7 +83,7 @@ func (app *MiyooPod) playCurrentQueueTrack() {
 	time.Sleep(100 * time.Millisecond)
 	state := audioGetState()
 	if !state.IsPlaying && !state.IsPaused {
-		logMsg("Audio failed to start playing")
+		logMsg("ERROR: Audio failed to start playing")
 		app.Playing.State = StateStopped
 		app.Playing.Track = nil
 		app.showError("Playback failed to start")
@@ -92,6 +92,9 @@ func (app *MiyooPod) playCurrentQueueTrack() {
 
 	app.updateCoverflowForCurrentTrack()
 	app.NPCacheDirty = true
+
+	// Persist queue state when track changes
+	app.savePlaybackState()
 }
 
 // getCurrentTrack returns the current track based on queue and shuffle state
@@ -204,13 +207,13 @@ func (app *MiyooPod) handleTrackEnd() {
 			app.Playing.State = StateStopped
 			app.NPCacheDirty = true
 			app.refreshRootMenu()
-			app.drawCurrentScreen()
+			app.requestRedraw()
 		}
 		return
 	}
 
 	app.playCurrentQueueTrack()
-	app.drawCurrentScreen()
+	app.requestRedraw()
 }
 
 func (app *MiyooPod) toggleShuffle() {
@@ -357,8 +360,8 @@ func (app *MiyooPod) updateProgressBarOnly() {
 		return
 	}
 
-	// Don't draw progress bar over lock overlay
-	if app.Locked {
+	// Don't draw progress bar over lock or volume/brightness overlay
+	if app.Locked || app.OverlayVisible {
 		return
 	}
 
@@ -420,6 +423,12 @@ func (app *MiyooPod) renderNowPlayingFull() {
 		}
 		dc.DrawString(trackInfo, float64(infoX), float64(infoStartY+95))
 	}
+
+	// Control hints
+	dc.SetFontFace(app.FontSmall)
+	dc.SetHexColor(app.CurrentTheme.Dim)
+	dc.DrawString("Hold L/R to seek", float64(infoX), float64(infoStartY+125))
+	dc.DrawString("X Repeat · SELECT Shuffle", float64(infoX), float64(infoStartY+150))
 
 	app.drawStatusIndicators(infoStartY + 250)
 }

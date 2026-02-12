@@ -313,6 +313,34 @@ func (app *MiyooPod) buildSettingsMenuItems(root *MenuScreen) []*MenuItem {
 		},
 	})
 
+	// Check for Updates
+	items = append(items, &MenuItem{
+		Label: "Check for Updates",
+		Action: func() {
+			app.manualCheckForUpdates()
+		},
+	})
+
+	// Update Notifications toggle
+	updateNotifStatus := "Off"
+	if app.UpdateNotifications {
+		updateNotifStatus = "On"
+	}
+	items = append(items, &MenuItem{
+		Label: "Update Notifications: " + updateNotifStatus,
+		Action: func() {
+			app.toggleUpdateNotifications()
+		},
+	})
+
+	// Clear App Data
+	items = append(items, &MenuItem{
+		Label: "Clear App Data",
+		Action: func() {
+			app.clearAppData()
+		},
+	})
+
 	return items
 }
 
@@ -391,7 +419,11 @@ func (app *MiyooPod) handleMenuKey(key Key) {
 		if len(current.Items) == 0 {
 			return
 		}
+		// Grab the selected item BEFORE cancelling search, since cancel restores the unfiltered list
 		item := current.Items[current.SelIndex]
+		if app.SearchActive || app.SearchAllItems != nil {
+			app.cancelSearch()
+		}
 		if item.Submenu != nil {
 			if !item.Submenu.Built && item.Submenu.Builder != nil {
 				item.Submenu.Items = item.Submenu.Builder()
@@ -411,7 +443,12 @@ func (app *MiyooPod) handleMenuKey(key Key) {
 			item.Action()
 		}
 	case LEFT, B:
-		if len(app.MenuStack) > 1 {
+		if app.SearchActive {
+			app.closeSearchPanel()
+		} else if app.SearchAllItems != nil {
+			// Search panel was closed but filter is still active — clear it
+			app.cancelSearch()
+		} else if len(app.MenuStack) > 1 {
 			app.MenuStack = app.MenuStack[:len(app.MenuStack)-1]
 			// Track navigation back
 			if len(app.MenuStack) > 0 {
@@ -427,7 +464,9 @@ func (app *MiyooPod) handleMenuKey(key Key) {
 			}
 		}
 	case MENU:
-		if len(app.MenuStack) > 1 {
+		if app.SearchActive || app.SearchAllItems != nil {
+			app.cancelSearch()
+		} else if len(app.MenuStack) > 1 {
 			app.MenuStack = app.MenuStack[:1]
 		} else {
 			app.Running = false
@@ -483,6 +522,12 @@ func (app *MiyooPod) drawMenuScreen() {
 		current.Built = true
 	}
 
+	// When search is active, always use the split layout with search panel
+	if app.SearchActive {
+		app.drawMenuWithSearchPanel(current)
+		return
+	}
+
 	// Check if this is an album list (has albums in menu items)
 	isAlbumList := len(current.Items) > 0 && current.Items[0].Album != nil
 
@@ -491,6 +536,76 @@ func (app *MiyooPod) drawMenuScreen() {
 	} else {
 		app.drawStandardMenu(current)
 	}
+}
+
+// drawMenuWithSearchPanel renders the menu list on the left with search grid on the right
+func (app *MiyooPod) drawMenuWithSearchPanel(current *MenuScreen) {
+	dc := app.DC
+
+	dc.SetHexColor(app.CurrentTheme.BG)
+	dc.Clear()
+
+	app.drawHeader(current.Title)
+
+	listWidth := SCREEN_WIDTH - searchPanelWidth
+
+	// Draw menu items on the left
+	if len(current.Items) == 0 {
+		dc.SetFontFace(app.FontMenu)
+		dc.SetHexColor(app.CurrentTheme.Dim)
+		dc.DrawStringAnchored("No results", float64(listWidth)/2, SCREEN_HEIGHT/2, 0.5, 0.5)
+	} else {
+		endIdx := current.ScrollOff + VISIBLE_ITEMS
+		if endIdx > len(current.Items) {
+			endIdx = len(current.Items)
+		}
+
+		for i := current.ScrollOff; i < endIdx; i++ {
+			item := current.Items[i]
+			y := MENU_TOP_Y + (i-current.ScrollOff)*MENU_ITEM_HEIGHT
+			selected := i == current.SelIndex
+
+			if selected {
+				dc.SetHexColor(app.CurrentTheme.SelBG)
+				dc.DrawRectangle(0, float64(y), float64(listWidth), MENU_ITEM_HEIGHT)
+				dc.Fill()
+			}
+
+			dc.SetFontFace(app.FontMenu)
+			if selected {
+				dc.SetHexColor(app.CurrentTheme.SelTxt)
+			} else {
+				dc.SetHexColor(app.CurrentTheme.ItemTxt)
+			}
+
+			maxWidth := float64(listWidth - MENU_LEFT_PAD - 20)
+			displayText := app.truncateText(item.Label, maxWidth, app.FontMenu)
+			textY := float64(y) + float64(MENU_ITEM_HEIGHT)/2
+			dc.DrawStringAnchored(displayText, float64(MENU_LEFT_PAD), textY, 0, 0.5)
+
+			if item.HasSubmenu {
+				dc.DrawString(">", float64(listWidth-20), float64(y+MENU_ITEM_HEIGHT/2+6))
+			}
+		}
+
+		// Scroll bar for list
+		if len(current.Items) > VISIBLE_ITEMS {
+			scrollBarHeight := float64(SCREEN_HEIGHT-HEADER_HEIGHT-STATUS_BAR_HEIGHT) * float64(VISIBLE_ITEMS) / float64(len(current.Items))
+			scrollBarY := float64(HEADER_HEIGHT) + float64(SCREEN_HEIGHT-HEADER_HEIGHT-STATUS_BAR_HEIGHT)*float64(current.ScrollOff)/float64(len(current.Items))
+			dc.SetHexColor(app.CurrentTheme.Dim)
+			dc.DrawRectangle(float64(listWidth-5), scrollBarY, 3, scrollBarHeight)
+			dc.Fill()
+		}
+	}
+
+	// Vertical separator
+	dc.SetHexColor(app.CurrentTheme.Dim)
+	dc.SetLineWidth(1)
+	dc.DrawLine(float64(listWidth), float64(HEADER_HEIGHT), float64(listWidth), float64(SCREEN_HEIGHT-STATUS_BAR_HEIGHT))
+	dc.Stroke()
+
+	// Search panel on the right
+	app.drawSearchPanel(listWidth, HEADER_HEIGHT, searchPanelWidth)
 }
 
 // drawStandardMenu renders a normal menu without preview panel
@@ -549,8 +664,8 @@ func (app *MiyooPod) drawAlbumListWithPreview(current *MenuScreen) {
 		return
 	}
 
-	// Split screen: 70% for list, 30% for preview
-	listWidth := int(float64(SCREEN_WIDTH) * 0.7)
+	// Split screen: same width as search panel so layout doesn't shift when toggling search
+	listWidth := SCREEN_WIDTH - searchPanelWidth
 	previewX := listWidth + 10
 
 	// Draw menu items (left half)
@@ -742,15 +857,11 @@ func (app *MiyooPod) rescanLibrary() {
 		app.Playing.State = StateStopped
 	}
 
-	// Perform the scan
-	app.ScanLibrary()
-
-	// Rebuild the root menu with the new library
-	app.RootMenu = app.buildRootMenu()
-	app.MenuStack = []*MenuScreen{app.RootMenu}
-
-	// Redraw the screen
-	app.drawCurrentScreen()
+	// Launch scan as background goroutine — menu rebuilds when done
+	app.startLibraryScan(func() {
+		app.RootMenu = app.buildRootMenu()
+		app.MenuStack = []*MenuScreen{app.RootMenu}
+	})
 }
 
 // getLockKeyName returns the display name of the current lock key

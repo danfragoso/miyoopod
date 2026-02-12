@@ -9,6 +9,7 @@ import (
 func (app *MiyooPod) startPlaybackPoller() {
 	lastDrawnSecond := -1
 	tickCount := 0
+	saveTickCount := 0
 
 	for app.Running {
 		if app.Playing != nil && app.Playing.State != StateStopped {
@@ -24,11 +25,11 @@ func (app *MiyooPod) startPlaybackPoller() {
 			if state.IsPaused && app.Playing.State != StatePaused {
 				app.Playing.State = StatePaused
 				app.NPCacheDirty = true
-				app.drawCurrentScreen()
+				app.requestRedraw()
 			} else if state.IsPlaying && app.Playing.State != StatePlaying {
 				app.Playing.State = StatePlaying
 				app.NPCacheDirty = true
-				app.drawCurrentScreen()
+				app.requestRedraw()
 			}
 
 			if state.Finished {
@@ -50,6 +51,13 @@ func (app *MiyooPod) startPlaybackPoller() {
 			if tickCount >= 5 {
 				audioFlushBuffers()
 				tickCount = 0
+			}
+
+			// Save playback state every 3 seconds during active playback
+			saveTickCount++
+			if saveTickCount >= 3 {
+				app.savePlaybackState()
+				saveTickCount = 0
 			}
 		}
 		// Increased sleep to reduce CPU usage and SD card contention

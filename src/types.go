@@ -10,7 +10,7 @@ import (
 
 // App metadata
 const (
-	APP_VERSION = "0.0.4"
+	APP_VERSION = "0.0.5"
 	APP_AUTHOR  = "Danilo Fragoso"
 	SUPPORT_URL = "https://github.com/danfragoso/miyoopod"
 )
@@ -476,6 +476,8 @@ const (
 	ScreenMenu ScreenType = iota
 	ScreenNowPlaying
 	ScreenQueue
+	ScreenAlbumArt
+	ScreenLibraryScan
 )
 
 func (s ScreenType) String() string {
@@ -486,6 +488,10 @@ func (s ScreenType) String() string {
 		return "now_playing"
 	case ScreenQueue:
 		return "queue"
+	case ScreenAlbumArt:
+		return "album_art"
+	case ScreenLibraryScan:
+		return "library_scan"
 	default:
 		return "unknown"
 	}
@@ -605,23 +611,80 @@ type MiyooPod struct {
 	ScreenPeekActive     bool        // Whether screen is temporarily visible while locked
 	ScreenPeekTimer      *time.Timer // Timer to dim screen after peek
 
+	// Volume/Brightness state
+	SystemVolume   int         // MI_AO hardware volume (0-100), persisted across launches
+	SystemBrightness int       // PWM brightness (0-100), persisted across launches
+
 	// Volume/Brightness overlay
 	OverlayType    string      // "volume" or "brightness"
-	OverlayValue   int         // Current value (0-100)
+	OverlayValue   int         // Current value (0-100) for display
 	OverlayTimer   *time.Timer // Timer to hide overlay
 	OverlayVisible bool        // Whether overlay is currently shown
 
 	// Queue view state
 	QueueScrollOffset int // Scroll position for queue view
 
-	// Album art status callback
+	// Album art fetch state (background goroutine updates these, main thread reads for rendering)
 	albumArtStatusFunc func(string)
-	QueueSelectedIndex int // Selected track in queue view
+	AlbumArtFetching   bool           // Whether a fetch is currently running
+	AlbumArtCurrent    int            // Current album index being fetched
+	AlbumArtTotal      int            // Total albums to fetch
+	AlbumArtAlbumName  string         // Name of album currently being fetched
+	AlbumArtArtist     string         // Artist of album currently being fetched
+	AlbumArtStatus     string         // Status text from MusicBrainz
+	AlbumArtFetched    int            // Success count
+	AlbumArtFailed     int            // Failure count
+	AlbumArtDone       bool           // Fetch complete, showing results
+	AlbumArtElapsed    string         // Elapsed time for results display
+	RedrawChan         chan struct{}   // Background goroutines signal main thread to redraw
+
+	// Library scan state (background goroutine)
+	LibScanRunning   bool   // Whether a scan is currently running
+	LibScanDone      bool   // Scan complete, showing results
+	LibScanCount     int    // Number of tracks found so far
+	LibScanFolder    string // Current folder being scanned
+	LibScanStatus    string // Status text
+	LibScanElapsed   string // Elapsed time for results display
+	LibScanPhase     string // Current phase: "scanning", "sorting", "decoding", "saving"
+	QueueSelectedIndex int      // Selected track in queue view
 
 	// Settings
 	InstallationID   string // Unique ID for this installation
 	LocalLogsEnabled bool   // Whether to write logs to file
 	SentryEnabled    bool   // Whether to send events to Sentry
+
+	// Update state
+	UpdateAvailable      bool            // Whether an update is available
+	UpdateInfo           *VersionInfo    // Remote version info when update is available
+	UpdateNotifications  bool            // Whether to show auto update popup on launch
+	VersionCheckDone     chan struct{}    // Closed when async version check completes
+	ShowingUpdatePrompt  bool            // True when update prompt overlay is visible
+
+	// Seek state (fast forward / rewind on Now Playing)
+	SeekHeld      bool      // Whether L/R is currently held down
+	SeekActive    bool      // Whether seeking has activated (past hold threshold)
+	SeekDirection int       // -1 for rewind, +1 for fast forward
+	SeekStartTime time.Time // When the key was first pressed
+	LastSeekTick  time.Time // When the last seek tick was performed
+
+	// Header marquee state (now playing text scrolling)
+	MarqueeOffset     float64      // Current pixel offset for scrolling
+	MarqueeText       string       // Last rendered marquee text (reset offset on change)
+	MarqueeTime       time.Time    // Last marquee tick time
+	MarqueePauseUntil time.Time    // Don't scroll until this time (pause at start/loop)
+	MarqueeBuf        *image.RGBA  // Pre-rendered full marquee strip (text+spacer+text)
+	MarqueeBufW       int          // Full strip width in pixels
+	MarqueeDstX       int          // Destination X for marquee blit
+	MarqueeDstW       int          // Visible window width for marquee blit
+	MarqueeColor      [3]uint8     // Tint color (r, g, b)
+
+	// Search state
+	SearchActive    bool        // Whether search panel is visible
+	SearchQuery     string      // Current search input string
+	SearchGridRow   int         // Selected row in the A-Z grid (0-based)
+	SearchGridCol   int         // Selected column in the A-Z grid (0-based)
+	SearchAllItems  []*MenuItem // Unfiltered menu items (saved when search starts)
+	SearchMenuTitle string      // Original menu title
 
 	// Device info (detected at startup)
 	DeviceModel   string // e.g., "miyoo-mini-plus", "miyoo-mini-v4", "miyoo-mini-flip"
