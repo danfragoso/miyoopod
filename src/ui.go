@@ -237,8 +237,6 @@ func (app *MiyooPod) drawScrollBar(totalItems, scrollOff, visibleItems int) {
 		return
 	}
 
-	dc := app.DC
-
 	barX := float64(SCREEN_WIDTH - SCROLL_BAR_WIDTH - 1)
 	barTop := float64(MENU_TOP_Y)
 	barHeight := float64(SCREEN_HEIGHT - MENU_TOP_Y - STATUS_BAR_HEIGHT)
