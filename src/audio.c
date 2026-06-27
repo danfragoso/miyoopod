@@ -14,6 +14,11 @@ static void on_music_finished() {
     music_finished_flag = 1;
 }
 
+// MIX_INIT_OPUS was added in SDL2_mixer 2.6.0
+#ifndef MIX_INIT_OPUS
+#define MIX_INIT_OPUS 0x00000020
+#endif
+
 int audio_init() {
     c_log("audio_init entered");
 
@@ -26,7 +31,7 @@ int audio_init() {
     }
     c_log("Mix_OpenAudio OK");
 
-    int flags = MIX_INIT_MP3 | MIX_INIT_FLAC | MIX_INIT_OGG;
+    int flags = MIX_INIT_MP3 | MIX_INIT_FLAC | MIX_INIT_OGG | MIX_INIT_OPUS;
     int initted = Mix_Init(flags);
     if ((initted & MIX_INIT_MP3) == 0)  c_logf("Mix_Init MP3 failed: %s", Mix_GetError());
     else c_log("Mix_Init MP3 OK");
@@ -34,6 +39,8 @@ int audio_init() {
     else c_log("Mix_Init FLAC OK");
     if ((initted & MIX_INIT_OGG) == 0)  c_logf("Mix_Init OGG failed: %s", Mix_GetError());
     else c_log("Mix_Init OGG OK");
+    if ((initted & MIX_INIT_OPUS) == 0) c_logf("Mix_Init OPUS failed: %s", Mix_GetError());
+    else c_log("Mix_Init OPUS OK");
 
     Mix_HookMusicFinished(on_music_finished);
     return 0;
