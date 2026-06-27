@@ -961,7 +961,7 @@ func (app *MiyooPod) drawLockOverlay() {
 
 	// Exit hint
 	dc.SetHexColor("#999999")
-	dc.DrawStringAnchored("Hold POWER 2s to quit", centerX, centerY+40, 0.5, 0.5)
+	dc.DrawStringAnchored("Hold POWER 5s to quit", centerX, centerY+40, 0.5, 0.5)
 }
 
 // drawPowerExitWarning draws an overlay when the user is holding power button
@@ -978,7 +978,7 @@ func (app *MiyooPod) drawPowerExitWarning() {
 
 	dc.SetFontFace(app.FontTitle)
 	dc.SetHexColor("#FF4444")
-	dc.DrawStringAnchored("Keep holding to close", centerX, centerY-10, 0.5, 0.5)
+	dc.DrawStringAnchored("Keep holding to quit", centerX, centerY-10, 0.5, 0.5)
 
 	dc.SetFontFace(app.FontSmall)
 	dc.SetHexColor("#CCCCCC")

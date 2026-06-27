@@ -48,7 +48,7 @@ func (app *MiyooPod) startInactivityMonitor() {
 // exitAppGracefully saves state, restores hardware, and quits cleanly.
 // Called after 2-second power button hold.
 func (app *MiyooPod) exitAppGracefully() {
-	logMsg("INFO: Power button held for 2s — exiting gracefully")
+	logMsg("INFO: Power button held for 5s — exiting gracefully")
 
 	app.savePlaybackState()
 	restoreBrightness()

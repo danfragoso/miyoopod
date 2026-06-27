@@ -93,13 +93,13 @@ func (app *MiyooPod) handlePowerButtonPress() {
 		app.PowerButtonPressed = true
 		app.PowerButtonPressTime = time.Now()
 
-		app.PowerHoldTimer = time.AfterFunc(1*time.Second, func() {
+		app.PowerHoldTimer = time.AfterFunc(2*time.Second, func() {
 			if !app.PowerButtonPressed {
 				return
 			}
 			app.showPowerExitWarning()
 
-			app.PowerExitTimer = time.AfterFunc(1*time.Second, func() {
+			app.PowerExitTimer = time.AfterFunc(3*time.Second, func() {
 				if !app.PowerButtonPressed {
 					return
 				}
@@ -117,7 +117,7 @@ func (app *MiyooPod) handlePowerButtonRelease() {
 		app.stopPowerTimers()
 		app.hidePowerExitWarning()
 
-		if holdDuration < 2*time.Second {
+		if holdDuration < 5*time.Second {
 			app.toggleLock()
 		}
 	}

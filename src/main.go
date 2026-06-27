@@ -574,7 +574,7 @@ func (app *MiyooPod) drawCurrentScreen() {
 	}
 
 	// Draw lock overlay if locked
-	if app.Locked {
+	if app.Locked && !app.PowerExitWarning {
 		app.drawLockOverlay()
 	}
 
