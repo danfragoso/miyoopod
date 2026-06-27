@@ -612,8 +612,9 @@ func (app *MiyooPod) drawCenteredText(text string, y float64, face font.Face, co
 func (app *MiyooPod) drawStatusIndicators(y int) {
 	dc := app.DC
 
-	// All controls aligned to the right side (starting at x: 330 to match track info)
-	rightX := 330
+	// Controls centered between info (250) and screen edge (640)
+	// Icon group width ≈ 210px (shuffle 20 + gaps), center at 445
+	rightX := 340
 
 	// Shuffle icon
 	if app.Queue != nil && app.Queue.Shuffle {
