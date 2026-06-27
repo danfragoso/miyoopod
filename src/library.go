@@ -58,7 +58,17 @@ func (app *MiyooPod) runLibraryScan(onComplete func()) {
 			return nil
 		}
 		if info.IsDir() {
+			// Skip macOS metadata directories
+			if strings.HasPrefix(info.Name(), "__MACOSX") {
+				return filepath.SkipDir
+			}
 			app.LibScanFolder = path
+			return nil
+		}
+
+		// Skip macOS metadata files (._ Apple Double, .DS_Store, __MACOSX)
+		base := filepath.Base(path)
+		if strings.HasPrefix(base, "._") || base == ".DS_Store" || strings.HasPrefix(base, "__MACOSX") {
 			return nil
 		}
 
@@ -711,6 +721,16 @@ func (app *MiyooPod) loadLibraryJSON() error {
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal library: %v", err)
 	}
+
+	// Filter out macOS metadata files that may be in cached library from a previous scan
+	filtered := lib.Tracks[:0]
+	for _, track := range lib.Tracks {
+		if strings.HasPrefix(filepath.Base(track.Path), "._") {
+			continue
+		}
+		filtered = append(filtered, track)
+	}
+	lib.Tracks = filtered
 
 	app.Library = lib
 
