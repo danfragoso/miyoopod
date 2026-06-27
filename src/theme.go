@@ -6,6 +6,7 @@ import "fmt"
 func (app *MiyooPod) setTheme(theme Theme) {
 	app.CurrentTheme = theme
 	app.NPCacheDirty = true // Force Now Playing screen to re-render
+	app.MenuBG = nil        // Force full menu redraw with new theme colors
 	app.drawCurrentScreen()
 
 	// Track theme change

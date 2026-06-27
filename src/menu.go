@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"image"
 	"sort"
 
 	"github.com/fogleman/gg"
@@ -520,11 +521,13 @@ func (app *MiyooPod) drawMenuScreen() {
 	if !current.Built && current.Builder != nil {
 		current.Items = current.Builder()
 		current.Built = true
+		app.MenuBG = nil // invalidate cache on rebuild
 	}
 
 	// When search is active, always use the split layout with search panel
 	if app.SearchActive {
 		app.drawMenuWithSearchPanel(current)
+		app.MenuBG = nil
 		return
 	}
 
@@ -534,8 +537,57 @@ func (app *MiyooPod) drawMenuScreen() {
 	if isAlbumList {
 		app.drawAlbumListWithPreview(current)
 	} else {
-		app.drawStandardMenu(current)
+		app.drawStandardMenuCached(current)
 	}
+}
+
+// drawStandardMenuCached draws a standard menu using frame caching.
+// Only redraws the 2 changed rows on key press; full gg draw only on menu entry or scroll.
+func (app *MiyooPod) drawStandardMenuCached(current *MenuScreen) {
+	cacheKey := fmt.Sprintf("%s:%d", current.Title, current.ScrollOff)
+
+	// Check if we can use the cache (same menu, same scroll, selection changed)
+	if app.MenuBG != nil && app.MenuBGKey == cacheKey && app.MenuBGSel != current.SelIndex {
+		// Restore cached frame
+		copy(app.FB.Pix, app.MenuBG.Pix)
+
+		// Erase old selection and redraw as unselected
+		prevSel := app.MenuBGSel
+		if prevSel >= current.ScrollOff && prevSel < current.ScrollOff+VISIBLE_ITEMS && prevSel < len(current.Items) {
+			oldItem := current.Items[prevSel]
+			oldY := MENU_TOP_Y + (prevSel-current.ScrollOff)*MENU_ITEM_HEIGHT
+			bgR, bgG, bgB, _ := parseHexColor(app.CurrentTheme.BG)
+			app.fastFillRect(0, oldY, SCREEN_WIDTH, MENU_ITEM_HEIGHT, bgR, bgG, bgB, 255)
+			isPlaying := oldItem.Track != nil && app.Playing != nil && app.Playing.Track != nil && oldItem.Track.Path == app.Playing.Track.Path
+			isInQueue := oldItem.Track != nil && app.isTrackInQueue(oldItem.Track)
+			app.drawMenuItem(oldY, oldItem.Label, false, oldItem.HasSubmenu, isPlaying, isInQueue)
+		}
+
+		// Draw new selection as selected
+		newSel := current.SelIndex
+		if newSel >= current.ScrollOff && newSel < current.ScrollOff+VISIBLE_ITEMS {
+			newItem := current.Items[newSel]
+			newY := MENU_TOP_Y + (newSel-current.ScrollOff)*MENU_ITEM_HEIGHT
+			isPlaying := newItem.Track != nil && app.Playing != nil && app.Playing.Track != nil && newItem.Track.Path == app.Playing.Track.Path
+			isInQueue := newItem.Track != nil && app.isTrackInQueue(newItem.Track)
+			app.drawMenuItem(newY, newItem.Label, true, newItem.HasSubmenu, isPlaying, isInQueue)
+		}
+
+		app.MenuBGSel = current.SelIndex
+		copy(app.MenuBG.Pix, app.FB.Pix)
+		return
+	}
+
+	// Full draw
+	app.drawStandardMenu(current)
+
+	// Save to cache
+	if app.MenuBG == nil {
+		app.MenuBG = image.NewRGBA(image.Rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT))
+	}
+	copy(app.MenuBG.Pix, app.FB.Pix)
+	app.MenuBGKey = cacheKey
+	app.MenuBGSel = current.SelIndex
 }
 
 // drawMenuWithSearchPanel renders the menu list on the left with search grid on the right
@@ -796,6 +848,7 @@ func (app *MiyooPod) drawAlbumPreview(album *Album, x, y, width int) {
 
 // refreshRootMenu updates the root menu to include/exclude Now Playing
 func (app *MiyooPod) refreshRootMenu() {
+	app.MenuBG = nil
 	if app.RootMenu == nil {
 		return
 	}

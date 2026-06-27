@@ -586,6 +586,11 @@ type MiyooPod struct {
 	NowPlayingBG *image.RGBA
 	NPCacheDirty bool
 
+	// Menu screen cache (pre-rendered frame for smooth navigation)
+	MenuBG    *image.RGBA
+	MenuBGKey string // "title:scroll" — changes trigger full redraw
+	MenuBGSel int    // previous selection index (to erase old highlight)
+
 	// Performance optimization: text measurement cache
 	// Key: text+font.Face pointer, Value: width in pixels
 	TextMeasureCache map[string]float64
