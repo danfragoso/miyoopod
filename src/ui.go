@@ -927,7 +927,7 @@ func (app *MiyooPod) toggleLock() {
 		app.BrightnessNeedsRestore = true
 	}
 
-	app.drawCurrentScreen()
+	app.requestRedraw()
 }
 
 // drawLockOverlay draws a dimmed overlay when screen is locked

@@ -40,15 +40,20 @@ func (app *MiyooPod) DrawCoverflow() {
 func (app *MiyooPod) getCachedCover(album *Album, size int) image.Image {
 	key := fmt.Sprintf("%s|%s_%d", album.Artist, album.Name, size)
 
+	app.Coverflow.CoverCacheMu.Lock()
 	if cached, ok := app.Coverflow.CoverCache[key]; ok {
+		app.Coverflow.CoverCacheMu.Unlock()
 		return cached
 	}
+	app.Coverflow.CoverCacheMu.Unlock()
 
 	// Fast path: try exact-size RGBA pixel cache from disk
 	rgbaPath := app.rgbaCachePath(album)
 	if rgbaPath != "" {
 		if img := app.loadRGBACache(rgbaPath, size); img != nil {
+			app.Coverflow.CoverCacheMu.Lock()
 			app.Coverflow.CoverCache[key] = img
+			app.Coverflow.CoverCacheMu.Unlock()
 			return img
 		}
 		// Not the exact size — try loading the cached 200px version and downscale
@@ -56,7 +61,9 @@ func (app *MiyooPod) getCachedCover(album *Album, size int) image.Image {
 			if img := app.loadRGBACache(rgbaPath, COVER_CENTER_SIZE); img != nil {
 				dst := image.NewRGBA(image.Rect(0, 0, size, size))
 				xdraw.ApproxBiLinear.Scale(dst, dst.Bounds(), img, img.Bounds(), xdraw.Over, nil)
+				app.Coverflow.CoverCacheMu.Lock()
 				app.Coverflow.CoverCache[key] = dst
+				app.Coverflow.CoverCacheMu.Unlock()
 				return dst
 			}
 		}
@@ -77,10 +84,13 @@ func (app *MiyooPod) getCachedCover(album *Album, size int) image.Image {
 		// Still no image? Use default
 		if album.ArtImg == nil {
 			defaultKey := fmt.Sprintf("__default__%d", size)
+			app.Coverflow.CoverCacheMu.Lock()
 			if cached, ok := app.Coverflow.CoverCache[defaultKey]; ok {
 				app.Coverflow.CoverCache[key] = cached
+				app.Coverflow.CoverCacheMu.Unlock()
 				return cached
 			}
+			app.Coverflow.CoverCacheMu.Unlock()
 			return app.DefaultArt
 		}
 	}
@@ -90,7 +100,9 @@ func (app *MiyooPod) getCachedCover(album *Album, size int) image.Image {
 	srcBounds := album.ArtImg.Bounds()
 	xdraw.ApproxBiLinear.Scale(dst, dst.Bounds(), album.ArtImg, srcBounds, xdraw.Over, nil)
 
+	app.Coverflow.CoverCacheMu.Lock()
 	app.Coverflow.CoverCache[key] = dst
+	app.Coverflow.CoverCacheMu.Unlock()
 
 	// Save 200px RGBA cache for next startup (the canonical cached size)
 	if rgbaPath != "" && size == COVER_CENTER_SIZE {

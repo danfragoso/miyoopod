@@ -2,6 +2,7 @@ package main
 
 import (
 	"image"
+	"sync"
 	"time"
 
 	"github.com/fogleman/gg"
@@ -536,9 +537,10 @@ type NowPlaying struct {
 // --- Coverflow state ---
 
 type CoverflowState struct {
-	Albums      []*Album
-	CenterIndex int
-	CoverCache  map[string]image.Image
+	Albums       []*Album
+	CenterIndex  int
+	CoverCache   map[string]image.Image
+	CoverCacheMu sync.Mutex
 }
 
 // --- Main application ---
@@ -625,6 +627,9 @@ type MiyooPod struct {
 	PowerHoldTimer      *time.Timer // 1s timer — show exit warning
 	PowerExitTimer      *time.Timer // 2s timer — graceful exit
 	PowerExitWarning    bool        // Exit warning overlay is visible
+
+	// Deferred operations (set by goroutines, handled by main loop)
+	TrackEndPending bool // Poller detected track ended, main loop calls handleTrackEnd
 
 	// Volume/Brightness state
 	SystemVolume     int // MI_AO hardware volume (0-100), persisted across launches

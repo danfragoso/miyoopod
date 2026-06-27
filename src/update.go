@@ -34,7 +34,7 @@ func (app *MiyooPod) showUpdatePrompt() {
 	}
 
 	app.ShowingUpdatePrompt = true
-	app.drawCurrentScreen()
+	app.requestRedraw()
 }
 
 // drawUpdatePromptOverlay renders the update dialog overlay.

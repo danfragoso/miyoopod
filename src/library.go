@@ -321,7 +321,9 @@ func (app *MiyooPod) decodeAlbumArt() {
 		rgbaPath := app.rgbaCachePath(album)
 		if rgbaPath != "" {
 			if img := app.loadRGBACache(rgbaPath, size); img != nil {
+				app.Coverflow.CoverCacheMu.Lock()
 				app.Coverflow.CoverCache[key] = img
+				app.Coverflow.CoverCacheMu.Unlock()
 				album.ArtData = nil
 				album.ArtImg = nil
 				rgbaCacheHits++
@@ -364,7 +366,9 @@ func (app *MiyooPod) decodeAlbumArt() {
 		dc.Scale(sx, sy)
 		dc.DrawImage(img, 0, 0)
 		resized := dc.Image()
+		app.Coverflow.CoverCacheMu.Lock()
 		app.Coverflow.CoverCache[key] = resized
+		app.Coverflow.CoverCacheMu.Unlock()
 
 		// Save RGBA cache for next startup
 		if rgbaPath != "" {
@@ -390,7 +394,9 @@ func (app *MiyooPod) decodeAlbumArt() {
 		dc.DrawStringAnchored("No Art", float64(size)/2, float64(size)/2, 0.5, 0.5)
 	}
 	app.DefaultArt = dc.Image()
+	app.Coverflow.CoverCacheMu.Lock()
 	app.Coverflow.CoverCache[fmt.Sprintf("__default__%d", size)] = dc.Image()
+	app.Coverflow.CoverCacheMu.Unlock()
 }
 
 // rgbaCachePath returns the path for an album's pre-resized RGBA cache file, or "" if no art
@@ -470,7 +476,9 @@ func (app *MiyooPod) deferredArtExtraction() {
 						resized := dc.Image()
 
 						key := fmt.Sprintf("%s|%s_%d", album.Artist, album.Name, size)
+						app.Coverflow.CoverCacheMu.Lock()
 						app.Coverflow.CoverCache[key] = resized
+						app.Coverflow.CoverCacheMu.Unlock()
 
 						if rgba, ok := resized.(*image.RGBA); ok {
 							app.saveRGBACache(rgbaPath, rgba)

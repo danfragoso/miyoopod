@@ -316,6 +316,13 @@ func main() {
 
 		app.pollSeek()
 		app.pollMarquee()
+
+		// Handle track end deferred from playback poller (avoids racing on Queue/Playing)
+		if app.TrackEndPending {
+			app.TrackEndPending = false
+			app.handleTrackEnd()
+		}
+
 		// Check if a background goroutine requested a redraw (non-blocking)
 		select {
 		case <-app.RedrawChan:

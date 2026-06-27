@@ -34,7 +34,9 @@ func (app *MiyooPod) startPlaybackPoller() {
 			}
 
 			if state.Finished {
-				app.handleTrackEnd()
+				// Defer to main loop — avoids racing on Queue/Playing state
+				app.TrackEndPending = true
+				app.requestRedraw()
 			}
 
 			// Update progress bar when on Now Playing screen and second changes
