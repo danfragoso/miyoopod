@@ -71,7 +71,7 @@ func (app *MiyooPod) runLibraryScan(onComplete func()) {
 
 		ext := strings.ToLower(filepath.Ext(path))
 		switch ext {
-		case ".mp3", ".flac", ".ogg":
+		case ".mp3", ".flac", ".ogg", ".opus":
 			app.scanTrack(path)
 			fileCount++
 			app.LibScanCount = fileCount
