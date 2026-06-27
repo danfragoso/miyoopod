@@ -365,7 +365,7 @@ func AllThemes() []Theme {
 
 // Coverflow constants (at 640x480 native resolution)
 const (
-	COVER_CENTER_SIZE = 280
+	COVER_CENTER_SIZE = 200
 	COVER_SIDE_SIZE   = 140
 	COVER_FAR_SIZE    = 100
 	COVER_CENTER_Y    = 60

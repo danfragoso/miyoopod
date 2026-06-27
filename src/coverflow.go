@@ -44,12 +44,21 @@ func (app *MiyooPod) getCachedCover(album *Album, size int) image.Image {
 		return cached
 	}
 
-	// Fast path: try RGBA pixel cache from disk
+	// Fast path: try exact-size RGBA pixel cache from disk
 	rgbaPath := app.rgbaCachePath(album)
 	if rgbaPath != "" {
 		if img := app.loadRGBACache(rgbaPath, size); img != nil {
 			app.Coverflow.CoverCache[key] = img
 			return img
+		}
+		// Not the exact size — try loading the cached 200px version and downscale
+		if size != COVER_CENTER_SIZE {
+			if img := app.loadRGBACache(rgbaPath, COVER_CENTER_SIZE); img != nil {
+				dst := image.NewRGBA(image.Rect(0, 0, size, size))
+				xdraw.ApproxBiLinear.Scale(dst, dst.Bounds(), img, img.Bounds(), xdraw.Over, nil)
+				app.Coverflow.CoverCache[key] = dst
+				return dst
+			}
 		}
 	}
 
@@ -76,15 +85,15 @@ func (app *MiyooPod) getCachedCover(album *Album, size int) image.Image {
 		}
 	}
 
-	// Resize on demand using optimized bi-linear scaling (~3x faster than gg)
+	// Cold path: full-res decode, runs once per album then cached forever
 	dst := image.NewRGBA(image.Rect(0, 0, size, size))
 	srcBounds := album.ArtImg.Bounds()
 	xdraw.ApproxBiLinear.Scale(dst, dst.Bounds(), album.ArtImg, srcBounds, xdraw.Over, nil)
 
 	app.Coverflow.CoverCache[key] = dst
 
-	// Save RGBA cache for next startup
-	if rgbaPath != "" {
+	// Save 200px RGBA cache for next startup (the canonical cached size)
+	if rgbaPath != "" && size == COVER_CENTER_SIZE {
 		app.saveRGBACache(rgbaPath, dst)
 	}
 
