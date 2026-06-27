@@ -92,9 +92,19 @@ func (app *MiyooPod) handlePowerButtonPress() {
 	if !app.PowerButtonPressed {
 		app.PowerButtonPressed = true
 		app.PowerButtonPressTime = time.Now()
-		// Start event-driven timer for 5-second force shutdown (no polling)
-		app.PowerHoldTimer = time.AfterFunc(5*time.Second, func() {
-			app.monitorPowerButtonHold()
+
+		app.PowerHoldTimer = time.AfterFunc(1*time.Second, func() {
+			if !app.PowerButtonPressed {
+				return
+			}
+			app.showPowerExitWarning()
+
+			app.PowerExitTimer = time.AfterFunc(1*time.Second, func() {
+				if !app.PowerButtonPressed {
+					return
+				}
+				app.exitAppGracefully()
+			})
 		})
 	}
 }
@@ -104,17 +114,23 @@ func (app *MiyooPod) handlePowerButtonRelease() {
 		holdDuration := time.Since(app.PowerButtonPressTime)
 		app.PowerButtonPressed = false
 
-		// Cancel the 5-second timer since button was released
-		if app.PowerHoldTimer != nil {
-			app.PowerHoldTimer.Stop()
-			app.PowerHoldTimer = nil
-		}
+		app.stopPowerTimers()
+		app.hidePowerExitWarning()
 
-		// If held for less than 5 seconds, toggle lock
-		if holdDuration < 5*time.Second {
+		if holdDuration < 2*time.Second {
 			app.toggleLock()
 		}
-		// If held for 5+ seconds, monitorPowerButtonHold already handled shutdown
+	}
+}
+
+func (app *MiyooPod) stopPowerTimers() {
+	if app.PowerHoldTimer != nil {
+		app.PowerHoldTimer.Stop()
+		app.PowerHoldTimer = nil
+	}
+	if app.PowerExitTimer != nil {
+		app.PowerExitTimer.Stop()
+		app.PowerExitTimer = nil
 	}
 }
 

@@ -621,7 +621,9 @@ type MiyooPod struct {
 
 	// CPU power management
 	OriginalCPUGovernor string      // Saved CPU governor to restore on exit
-	PowerHoldTimer      *time.Timer // Timer for power button long-press detection (event-driven)
+	PowerHoldTimer      *time.Timer // 1s timer — show exit warning
+	PowerExitTimer      *time.Timer // 2s timer — graceful exit
+	PowerExitWarning    bool        // Exit warning overlay is visible
 
 	// Volume/Brightness state
 	SystemVolume     int // MI_AO hardware volume (0-100), persisted across launches

@@ -586,6 +586,11 @@ func (app *MiyooPod) drawCurrentScreen() {
 	// Draw error popup overlay if active
 	app.drawErrorPopup()
 
+	// Draw power exit warning overlay if holding power button
+	if app.PowerExitWarning {
+		app.drawPowerExitWarning()
+	}
+
 	// Draw update prompt overlay if showing
 	if app.ShowingUpdatePrompt {
 		app.drawUpdatePromptOverlay()

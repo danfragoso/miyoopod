@@ -45,27 +45,39 @@ func (app *MiyooPod) startInactivityMonitor() {
 	}
 }
 
-// monitorPowerButtonHold is now event-driven via a timer set in handlePowerButtonPress.
-// This function is kept as the timer callback for the 5-second force shutdown.
-func (app *MiyooPod) monitorPowerButtonHold() {
-	// If button was released before the timer fired, do nothing
-	if !app.PowerButtonPressed {
-		return
-	}
+// exitAppGracefully saves state, restores hardware, and quits cleanly.
+// Called after 2-second power button hold.
+func (app *MiyooPod) exitAppGracefully() {
+	logMsg("INFO: Power button held for 2s — exiting gracefully")
 
-	holdDuration := time.Since(app.PowerButtonPressTime)
-	logMsg("INFO: Power button held for 5+ seconds - forcing shutdown")
-
-	// Restore brightness and CPU governor before exiting
+	app.savePlaybackState()
 	restoreBrightness()
 	app.restoreCPUGovernor()
 
-	TrackAction("force_shutdown", map[string]interface{}{
-		"hold_duration": holdDuration.Seconds(),
-	})
+	TrackAction("power_exit", nil)
 
-	// Set flag to exit cleanly
 	app.Running = false
+}
+
+// showPowerExitWarning brightens the screen if dimmed and shows the exit warning overlay.
+func (app *MiyooPod) showPowerExitWarning() {
+	if app.Locked {
+		restoreBrightness()
+	}
+	app.PowerExitWarning = true
+	app.requestRedraw()
+}
+
+// hidePowerExitWarning removes the exit warning overlay and re-dims the screen if locked.
+func (app *MiyooPod) hidePowerExitWarning() {
+	if !app.PowerExitWarning {
+		return
+	}
+	app.PowerExitWarning = false
+	if app.Locked {
+		app.dimScreen()
+	}
+	app.requestRedraw()
 }
 
 // resetInactivityTimer resets the inactivity timer (called on user interaction)

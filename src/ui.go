@@ -959,9 +959,30 @@ func (app *MiyooPod) drawLockOverlay() {
 	lockKeyName := app.getLockKeyName()
 	dc.DrawStringAnchored(fmt.Sprintf("Press POWER or double-press %s to unlock", lockKeyName), centerX, centerY+15, 0.5, 0.5)
 
-	// Force quit hint
+	// Exit hint
 	dc.SetHexColor("#999999")
-	dc.DrawStringAnchored("Hold POWER for 5s to force quit", centerX, centerY+40, 0.5, 0.5)
+	dc.DrawStringAnchored("Hold POWER 2s to quit", centerX, centerY+40, 0.5, 0.5)
+}
+
+// drawPowerExitWarning draws an overlay when the user is holding power button
+// past 1 second, warning them to keep holding to exit.
+func (app *MiyooPod) drawPowerExitWarning() {
+	dc := app.DC
+
+	dc.SetRGBA(0, 0, 0, 0.5)
+	dc.DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+	dc.Fill()
+
+	centerX := SCREEN_WIDTH / 2.0
+	centerY := SCREEN_HEIGHT / 2.0
+
+	dc.SetFontFace(app.FontTitle)
+	dc.SetHexColor("#FF4444")
+	dc.DrawStringAnchored("Keep holding to close", centerX, centerY-10, 0.5, 0.5)
+
+	dc.SetFontFace(app.FontSmall)
+	dc.SetHexColor("#CCCCCC")
+	dc.DrawStringAnchored("Release to cancel", centerX, centerY+20, 0.5, 0.5)
 }
 
 // getBrightness reads the current PWM duty_cycle (brightness level)
