@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -44,41 +45,27 @@ func (app *MiyooPod) startInactivityMonitor() {
 	}
 }
 
-// monitorPowerButtonHold monitors power button hold duration and forces quit if held 5+ seconds
+// monitorPowerButtonHold is now event-driven via a timer set in handlePowerButtonPress.
+// This function is kept as the timer callback for the 5-second force shutdown.
 func (app *MiyooPod) monitorPowerButtonHold() {
-	startTime := app.PowerButtonPressTime
-
-	// Check every 100ms
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			// If button was released, stop monitoring
-			if !app.PowerButtonPressed {
-				return
-			}
-
-			holdDuration := time.Since(startTime)
-
-			// Force shutdown after 5 seconds
-			if holdDuration >= 5*time.Second {
-				logMsg("INFO: Power button held for 5+ seconds - forcing shutdown")
-
-				// Restore brightness before exiting
-				restoreBrightness()
-
-				TrackAction("force_shutdown", map[string]interface{}{
-					"hold_duration": holdDuration.Seconds(),
-				})
-
-				// Set flag to exit cleanly
-				app.Running = false
-				return
-			}
-		}
+	// If button was released before the timer fired, do nothing
+	if !app.PowerButtonPressed {
+		return
 	}
+
+	holdDuration := time.Since(app.PowerButtonPressTime)
+	logMsg("INFO: Power button held for 5+ seconds - forcing shutdown")
+
+	// Restore brightness and CPU governor before exiting
+	restoreBrightness()
+	app.restoreCPUGovernor()
+
+	TrackAction("force_shutdown", map[string]interface{}{
+		"hold_duration": holdDuration.Seconds(),
+	})
+
+	// Set flag to exit cleanly
+	app.Running = false
 }
 
 // resetInactivityTimer resets the inactivity timer (called on user interaction)
@@ -120,5 +107,69 @@ func (app *MiyooPod) dimScreen() {
 		logMsg(fmt.Sprintf("WARNING: Could not dim screen: %v", err))
 	} else {
 		logMsg("Screen dimmed (locked)")
+	}
+}
+
+// --- CPU governor management ---
+
+// cpuGovernorPaths returns the sysfs paths for all CPU cores' scaling_governor
+func cpuGovernorPaths() []string {
+	var paths []string
+	for i := 0; i < 2; i++ { // Dual-core Cortex-A7
+		paths = append(paths, fmt.Sprintf("/sys/devices/system/cpu/cpu%d/cpufreq/scaling_governor", i))
+	}
+	return paths
+}
+
+// readCPUGovernor reads the current governor from cpu0
+func readCPUGovernor() string {
+	data, err := os.ReadFile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// writeCPUGovernor writes the governor to all CPU cores
+func writeCPUGovernor(governor string) error {
+	for _, path := range cpuGovernorPaths() {
+		if err := os.WriteFile(path, []byte(governor), 0644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// initCPUGovernor saves the original CPU governor for later restoration on exit
+func (app *MiyooPod) initCPUGovernor() {
+	app.OriginalCPUGovernor = readCPUGovernor()
+	if app.OriginalCPUGovernor != "" {
+		logMsg(fmt.Sprintf("INFO: Original CPU governor: %s", app.OriginalCPUGovernor))
+	}
+}
+
+// setCPUGovernorLocked switches to powersave (screen off, audio-only — max battery savings)
+func (app *MiyooPod) setCPUGovernorLocked() {
+	if err := writeCPUGovernor("powersave"); err != nil {
+		logMsg(fmt.Sprintf("WARNING: Could not set CPU governor to powersave: %v", err))
+	}
+}
+
+// setCPUGovernorUnlocked switches to performance (full speed for responsive UI)
+func (app *MiyooPod) setCPUGovernorUnlocked() {
+	if err := writeCPUGovernor("performance"); err != nil {
+		logMsg(fmt.Sprintf("WARNING: Could not set CPU governor to performance: %v", err))
+	}
+}
+
+// restoreCPUGovernor restores the original CPU governor on app exit
+func (app *MiyooPod) restoreCPUGovernor() {
+	if app.OriginalCPUGovernor == "" {
+		return
+	}
+	if err := writeCPUGovernor(app.OriginalCPUGovernor); err != nil {
+		logMsg(fmt.Sprintf("WARNING: Could not restore CPU governor to %s: %v", app.OriginalCPUGovernor, err))
+	} else {
+		logMsg(fmt.Sprintf("INFO: CPU governor restored to %s", app.OriginalCPUGovernor))
 	}
 }

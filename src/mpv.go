@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"os"
 	"time"
 )
 
@@ -8,7 +10,6 @@ import (
 // Runs in its own goroutine. Minimal work per tick to avoid starving audio.
 func (app *MiyooPod) startPlaybackPoller() {
 	lastDrawnSecond := -1
-	tickCount := 0
 	saveTickCount := 0
 
 	for app.Running {
@@ -55,17 +56,9 @@ func (app *MiyooPod) startPlaybackPoller() {
 				}
 			}
 
-			// Flush audio buffers every 5 seconds to prevent choppy playback
-			// Mimics the fix that happens when user manually pauses/resumes
-			tickCount++
-			if tickCount >= 5 {
-				audioFlushBuffers()
-				tickCount = 0
-			}
-
-			// Save playback state every 3 seconds during active playback
+			// Save playback state every 10 seconds during active playback
 			saveTickCount++
-			if saveTickCount >= 3 {
+			if saveTickCount >= 10 {
 				app.savePlaybackState()
 				saveTickCount = 0
 			}
@@ -76,7 +69,22 @@ func (app *MiyooPod) startPlaybackPoller() {
 }
 
 func (app *MiyooPod) mpvLoadFile(path string) error {
-	// Stream from SD card with larger buffer (128KB) to reduce underruns
+	const maxRAMSize = 20 * 1024 * 1024 // 20MB
+
+	if info, err := os.Stat(path); err == nil && info.Size() > 0 && info.Size() < maxRAMSize {
+		loadErr := audioLoadFileToMemory(path)
+		if loadErr == nil {
+			playErr := audioPlay()
+			if playErr == nil {
+				return nil
+			}
+			logMsg(fmt.Sprintf("WARNING: RAM play failed (%v), falling back to streaming: %s", playErr, path))
+		} else {
+			logMsg(fmt.Sprintf("WARNING: RAM load failed (%v), falling back to streaming: %s", loadErr, path))
+		}
+		audioStop()
+	}
+
 	err := audioLoadFile(path)
 	if err != nil {
 		return err

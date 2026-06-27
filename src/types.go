@@ -619,9 +619,13 @@ type MiyooPod struct {
 	ScreenPeekActive     bool        // Whether screen is temporarily visible while locked
 	ScreenPeekTimer      *time.Timer // Timer to dim screen after peek
 
+	// CPU power management
+	OriginalCPUGovernor string      // Saved CPU governor to restore on exit
+	PowerHoldTimer      *time.Timer // Timer for power button long-press detection (event-driven)
+
 	// Volume/Brightness state
-	SystemVolume   int         // MI_AO hardware volume (0-100), persisted across launches
-	SystemBrightness int       // PWM brightness (0-100), persisted across launches
+	SystemVolume     int // MI_AO hardware volume (0-100), persisted across launches
+	SystemBrightness int // PWM brightness (0-100), persisted across launches
 
 	// Volume/Brightness overlay
 	OverlayType    string      // "volume" or "brightness"
@@ -634,27 +638,27 @@ type MiyooPod struct {
 
 	// Album art fetch state (background goroutine updates these, main thread reads for rendering)
 	albumArtStatusFunc func(string)
-	AlbumArtFetching   bool           // Whether a fetch is currently running
-	AlbumArtCurrent    int            // Current album index being fetched
-	AlbumArtTotal      int            // Total albums to fetch
-	AlbumArtAlbumName  string         // Name of album currently being fetched
-	AlbumArtArtist     string         // Artist of album currently being fetched
-	AlbumArtStatus     string         // Status text from MusicBrainz
-	AlbumArtFetched    int            // Success count
-	AlbumArtFailed     int            // Failure count
-	AlbumArtDone       bool           // Fetch complete, showing results
-	AlbumArtElapsed    string         // Elapsed time for results display
-	RedrawChan         chan struct{}   // Background goroutines signal main thread to redraw
+	AlbumArtFetching   bool          // Whether a fetch is currently running
+	AlbumArtCurrent    int           // Current album index being fetched
+	AlbumArtTotal      int           // Total albums to fetch
+	AlbumArtAlbumName  string        // Name of album currently being fetched
+	AlbumArtArtist     string        // Artist of album currently being fetched
+	AlbumArtStatus     string        // Status text from MusicBrainz
+	AlbumArtFetched    int           // Success count
+	AlbumArtFailed     int           // Failure count
+	AlbumArtDone       bool          // Fetch complete, showing results
+	AlbumArtElapsed    string        // Elapsed time for results display
+	RedrawChan         chan struct{} // Background goroutines signal main thread to redraw
 
 	// Library scan state (background goroutine)
-	LibScanRunning   bool   // Whether a scan is currently running
-	LibScanDone      bool   // Scan complete, showing results
-	LibScanCount     int    // Number of tracks found so far
-	LibScanFolder    string // Current folder being scanned
-	LibScanStatus    string // Status text
-	LibScanElapsed   string // Elapsed time for results display
-	LibScanPhase     string // Current phase: "scanning", "sorting", "decoding", "saving"
-	QueueSelectedIndex  int // Selected track in queue view
+	LibScanRunning     bool   // Whether a scan is currently running
+	LibScanDone        bool   // Scan complete, showing results
+	LibScanCount       int    // Number of tracks found so far
+	LibScanFolder      string // Current folder being scanned
+	LibScanStatus      string // Status text
+	LibScanElapsed     string // Elapsed time for results display
+	LibScanPhase       string // Current phase: "scanning", "sorting", "decoding", "saving"
+	QueueSelectedIndex int    // Selected track in queue view
 
 	// Lyrics screen state
 	LyricsScrollOffset  int                 // Line offset for scrolling lyrics
@@ -671,11 +675,11 @@ type MiyooPod struct {
 	SentryEnabled    bool   // Whether to send events to Sentry
 
 	// Update state
-	UpdateAvailable      bool            // Whether an update is available
-	UpdateInfo           *VersionInfo    // Remote version info when update is available
-	UpdateNotifications  bool            // Whether to show auto update popup on launch
-	VersionCheckDone     chan struct{}    // Closed when async version check completes
-	ShowingUpdatePrompt  bool            // True when update prompt overlay is visible
+	UpdateAvailable     bool          // Whether an update is available
+	UpdateInfo          *VersionInfo  // Remote version info when update is available
+	UpdateNotifications bool          // Whether to show auto update popup on launch
+	VersionCheckDone    chan struct{} // Closed when async version check completes
+	ShowingUpdatePrompt bool          // True when update prompt overlay is visible
 
 	// Seek state (fast forward / rewind on Now Playing)
 	SeekHeld      bool      // Whether L/R is currently held down
@@ -685,15 +689,15 @@ type MiyooPod struct {
 	LastSeekTick  time.Time // When the last seek tick was performed
 
 	// Header marquee state (now playing text scrolling)
-	MarqueeOffset     float64      // Current pixel offset for scrolling
-	MarqueeText       string       // Last rendered marquee text (reset offset on change)
-	MarqueeTime       time.Time    // Last marquee tick time
-	MarqueePauseUntil time.Time    // Don't scroll until this time (pause at start/loop)
-	MarqueeBuf        *image.RGBA  // Pre-rendered full marquee strip (text+spacer+text)
-	MarqueeBufW       int          // Full strip width in pixels
-	MarqueeDstX       int          // Destination X for marquee blit
-	MarqueeDstW       int          // Visible window width for marquee blit
-	MarqueeColor      [3]uint8     // Tint color (r, g, b)
+	MarqueeOffset     float64     // Current pixel offset for scrolling
+	MarqueeText       string      // Last rendered marquee text (reset offset on change)
+	MarqueeTime       time.Time   // Last marquee tick time
+	MarqueePauseUntil time.Time   // Don't scroll until this time (pause at start/loop)
+	MarqueeBuf        *image.RGBA // Pre-rendered full marquee strip (text+spacer+text)
+	MarqueeBufW       int         // Full strip width in pixels
+	MarqueeDstX       int         // Destination X for marquee blit
+	MarqueeDstW       int         // Visible window width for marquee blit
+	MarqueeColor      [3]uint8    // Tint color (r, g, b)
 
 	// Search state
 	SearchActive    bool        // Whether search panel is visible

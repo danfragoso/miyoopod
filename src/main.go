@@ -98,6 +98,9 @@ func (app *MiyooPod) Init() {
 		logMsg(fmt.Sprintf("WARNING: Could not load settings: %v (using defaults)", err))
 	}
 
+	// Save the original CPU governor so we can restore it on exit
+	app.initCPUGovernor()
+
 	// Draw splash screen with logo (now using restored theme if available)
 	app.drawLogoSplash()
 
@@ -319,11 +322,28 @@ func main() {
 			app.drawCurrentScreen()
 		default:
 		}
-		time.Sleep(33 * time.Millisecond) // ~30Hz polling, main thread sleeps most of the time
+
+		// Adaptive sleep: reduce CPU wakeups when user is idle or screen is locked.
+		// - Locked: 200ms (only need to detect unlock key presses)
+		// - Key held or seeking: 33ms (responsive key repeat / seek)
+		// - Default: 50ms (~20Hz, responsive enough for input, saves battery)
+		var sleepDur time.Duration
+		switch {
+		case app.Locked:
+			sleepDur = 200 * time.Millisecond
+		case app.LastKey != NONE || app.SeekHeld:
+			sleepDur = 33 * time.Millisecond
+		default:
+			sleepDur = 50 * time.Millisecond
+		}
+		time.Sleep(sleepDur)
 	}
 
 	// Save playback state before exit
 	app.savePlaybackState()
+
+	// Restore original CPU governor
+	app.restoreCPUGovernor()
 
 	// Track app closed
 	TrackAppLifecycle("app_closed", nil)
@@ -685,10 +705,6 @@ type AudioStateSnapshot struct {
 	IsPlaying bool
 	IsPaused  bool
 	Finished  bool
-}
-
-func audioFlushBuffers() {
-	C.audio_flush_buffers()
 }
 
 func audioGetState() AudioStateSnapshot {

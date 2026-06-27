@@ -11,11 +11,11 @@ import (
 const SETTINGS_PATH = "/mnt/SDCARD/Media/Music/.miyoopod_settings.json"
 
 type Settings struct {
-	InstallationID   string `json:"installation_id,omitempty"`
-	Theme            string `json:"theme,omitempty"`
-	LockKey          string `json:"lock_key,omitempty"`
-	LocalLogsEnabled bool   `json:"local_logs_enabled,omitempty"`
-	SentryEnabled    bool   `json:"sentry_enabled,omitempty"`
+	InstallationID      string `json:"installation_id,omitempty"`
+	Theme               string `json:"theme,omitempty"`
+	LockKey             string `json:"lock_key,omitempty"`
+	LocalLogsEnabled    bool   `json:"local_logs_enabled,omitempty"`
+	SentryEnabled       bool   `json:"sentry_enabled,omitempty"`
 	AutoLockMinutes     *int   `json:"auto_lock_minutes,omitempty"`
 	ScreenPeekEnabled   *bool  `json:"screen_peek_enabled,omitempty"`
 	UpdateNotifications *bool  `json:"update_notifications,omitempty"`

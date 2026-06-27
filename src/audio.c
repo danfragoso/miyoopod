@@ -185,14 +185,6 @@ typedef struct {
     int finished;
 } AudioState;
 
-void audio_flush_buffers() {
-    // Clear accumulated audio fragments to prevent choppy playback
-    // Safe to call during playback - SDL2_mixer will refill from stream
-    if (Mix_PlayingMusic() && !Mix_PausedMusic()) {
-        SDL_Delay(0); // Yield to allow audio thread to process
-    }
-}
-
 void audio_get_state(AudioState *state) {
     state->position = 0.0;
     state->duration = cached_duration;

@@ -913,6 +913,8 @@ func (app *MiyooPod) toggleLock() {
 		// Save current brightness and fully dim the screen
 		app.BrightnessBeforeLock = getBrightness()
 		app.dimScreen()
+		// Drop CPU to lowest frequency — screen is off, only audio needs to run
+		app.setCPUGovernorLocked()
 	} else {
 		logMsg("INFO: Screen unlocked")
 		TrackAction("screen_unlocked", nil)
@@ -927,6 +929,8 @@ func (app *MiyooPod) toggleLock() {
 		} else {
 			setBrightness(100) // Default to 100 if no saved value
 		}
+		// Ramp CPU back to full speed for responsive UI
+		app.setCPUGovernorUnlocked()
 	}
 
 	app.drawCurrentScreen()
