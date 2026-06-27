@@ -665,8 +665,8 @@ func (app *MiyooPod) drawStandardMenu(current *MenuScreen) {
 	dc := app.DC
 
 	// Background
-	dc.SetHexColor(app.CurrentTheme.BG)
-	dc.Clear()
+	bgr, bgg, bgb, _ := parseHexColor(app.CurrentTheme.BG)
+	app.fastFillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, bgr, bgg, bgb, 255)
 
 	// Header
 	app.drawHeader(current.Title)
@@ -703,8 +703,8 @@ func (app *MiyooPod) drawAlbumListWithPreview(current *MenuScreen) {
 	dc := app.DC
 
 	// Background
-	dc.SetHexColor(app.CurrentTheme.BG)
-	dc.Clear()
+	bgr, bgg, bgb, _ := parseHexColor(app.CurrentTheme.BG)
+	app.fastFillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, bgr, bgg, bgb, 255)
 
 	// Header
 	app.drawHeader(current.Title)

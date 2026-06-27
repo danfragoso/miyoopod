@@ -18,9 +18,8 @@ func (app *MiyooPod) drawHeader(title string) {
 	dc := app.DC
 
 	// Header background
-	dc.SetHexColor(app.CurrentTheme.HeaderBG)
-	dc.DrawRectangle(0, 0, SCREEN_WIDTH, HEADER_HEIGHT)
-	dc.Fill()
+	hr, hg, hb, _ := parseHexColor(app.CurrentTheme.HeaderBG)
+	app.fastFillRect(0, 0, SCREEN_WIDTH, HEADER_HEIGHT, hr, hg, hb, 255)
 
 	// Battery status in top-left
 	batteryPercent := getBatteryLevel()
@@ -188,9 +187,8 @@ func (app *MiyooPod) drawMenuItem(y int, label string, selected bool, hasSubmenu
 
 	// Selection highlight
 	if selected {
-		dc.SetHexColor(app.CurrentTheme.SelBG)
-		dc.DrawRectangle(0, float64(y), SCREEN_WIDTH, MENU_ITEM_HEIGHT)
-		dc.Fill()
+		sr, sg, sb, _ := parseHexColor(app.CurrentTheme.SelBG)
+		app.fastFillRect(0, y, SCREEN_WIDTH, MENU_ITEM_HEIGHT, sr, sg, sb, 255)
 	}
 
 	// Item text
@@ -246,17 +244,15 @@ func (app *MiyooPod) drawScrollBar(totalItems, scrollOff, visibleItems int) {
 	barHeight := float64(SCREEN_HEIGHT - MENU_TOP_Y - STATUS_BAR_HEIGHT)
 
 	// Track
-	dc.SetHexColor(app.CurrentTheme.ProgBG)
-	dc.DrawRectangle(barX, barTop, SCROLL_BAR_WIDTH, barHeight)
-	dc.Fill()
+	pr, pg, pb, _ := parseHexColor(app.CurrentTheme.ProgBG)
+	app.fastFillRect(int(barX), int(barTop), SCROLL_BAR_WIDTH, int(barHeight), pr, pg, pb, 255)
 
 	// Thumb
 	thumbHeight := math.Max(barHeight*float64(visibleItems)/float64(totalItems), 10)
 	thumbY := barTop + barHeight*float64(scrollOff)/float64(totalItems)
 
-	dc.SetHexColor(app.CurrentTheme.Accent)
-	dc.DrawRectangle(barX, thumbY, SCROLL_BAR_WIDTH, thumbHeight)
-	dc.Fill()
+	ar, ag, ab, _ := parseHexColor(app.CurrentTheme.Accent)
+	app.fastFillRect(int(barX), int(thumbY), SCROLL_BAR_WIDTH, int(thumbHeight), ar, ag, ab, 255)
 }
 
 // drawProgressBar draws the playback progress bar
@@ -660,15 +656,12 @@ func (app *MiyooPod) drawStatusBar() {
 	barY := float64(SCREEN_HEIGHT - STATUS_BAR_HEIGHT)
 
 	// Background
-	dc.SetHexColor(app.CurrentTheme.HeaderBG)
-	dc.DrawRectangle(0, barY, SCREEN_WIDTH, STATUS_BAR_HEIGHT)
-	dc.Fill()
+	hr, hg, hb, _ := parseHexColor(app.CurrentTheme.HeaderBG)
+	app.fastFillRect(0, int(barY), SCREEN_WIDTH, STATUS_BAR_HEIGHT, hr, hg, hb, 255)
 
 	// Separator line at top of bar
-	dc.SetHexColor(app.CurrentTheme.ProgBG)
-	dc.SetLineWidth(1)
-	dc.DrawLine(0, barY, SCREEN_WIDTH, barY)
-	dc.Stroke()
+	sr, sg, sb, _ := parseHexColor(app.CurrentTheme.ProgBG)
+	app.fastFillRect(0, int(barY), SCREEN_WIDTH, 1, sr, sg, sb, 255)
 
 	centerY := barY + float64(STATUS_BAR_HEIGHT)/2
 	dc.SetFontFace(app.FontSmall)
