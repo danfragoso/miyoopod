@@ -402,7 +402,7 @@ func (app *MiyooPod) renderNowPlayingFull() {
 	app.DrawCoverflow()
 
 	// Track info on the right side of the album art
-	infoX := 330
+	infoX := 250
 	infoStartY := 80
 
 	// Title
