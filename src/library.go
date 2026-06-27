@@ -54,11 +54,7 @@ func (app *MiyooPod) runLibraryScan(onComplete func()) {
 	fileCount := 0
 
 	filepath.Walk(MUSIC_ROOT, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			logMsg(fmt.Sprintf("[SCAN] Walk error at %s: %v", path, err))
-			return nil
-		}
-		if !app.Running {
+		if err != nil || !app.Running {
 			return nil
 		}
 		if info.IsDir() {
@@ -70,7 +66,6 @@ func (app *MiyooPod) runLibraryScan(onComplete func()) {
 		}
 
 		if isSystemPath(filepath.Base(path)) {
-			logMsg(fmt.Sprintf("[SCAN] Skipping system file: %s", path))
 			return nil
 		}
 
