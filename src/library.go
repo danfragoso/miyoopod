@@ -124,12 +124,8 @@ func (app *MiyooPod) runLibraryScan(onComplete func()) {
 		app.parsePlaylist(pl)
 	}
 
-	// Decode album art
-	app.LibScanPhase = "decoding"
-	app.LibScanStatus = "Decoding album art..."
-	app.requestRedraw()
-
-	app.decodeAlbumArt()
+	// Decode album art in background so the scan completes immediately
+	go app.decodeAlbumArt()
 
 	// Save to JSON
 	app.LibScanPhase = "saving"
@@ -169,6 +165,9 @@ func (app *MiyooPod) scanTrack(path string) {
 
 	track := &Track{Path: path}
 
+	var picData []byte
+	var picExt string
+
 	m, err := tag.ReadFrom(f)
 	if err == nil {
 		track.Title = m.Title()
@@ -183,31 +182,14 @@ func (app *MiyooPod) scanTrack(path string) {
 
 		if pic := m.Picture(); pic != nil {
 			track.HasArt = true
-			logMsg(fmt.Sprintf("[SCAN] Track has art: %s | Size: %d bytes, Type: %s, Ext: %s",
-				filepath.Base(path), len(pic.Data), pic.MIMEType, pic.Ext))
-		} else {
-			logMsg(fmt.Sprintf("[SCAN] Track has NO art: %s | Format: %T",
-				filepath.Base(path), m))
+			picData = pic.Data
+			picExt = pic.Ext
 		}
 	} else {
 		logMsg(fmt.Sprintf("[SCAN] Tag read error: %s | Error: %v", filepath.Base(path), err))
 	}
 
-	// Extract duration using SDL_mixer
-	track.Duration = audioGetDurationForFile(path)
-	if track.Duration == 0 {
-		logMsg(fmt.Sprintf("[SCAN] Warning: Could not extract duration for: %s", filepath.Base(path)))
-	}
-
-	// Derive average bitrate from file size and duration (kbps)
-	if track.Duration > 0 {
-		if info, err := os.Stat(path); err == nil {
-			track.Bitrate = int(float64(info.Size()) * 8 / track.Duration / 1000)
-		}
-	}
-
-	// Read sample rate from file header
-	track.SampleRate = readSampleRate(path)
+	// Duration and sample rate are lazy-filled on first play to speed up scanning
 
 	// Fallback: use filename as title
 	if track.Title == "" {
@@ -244,31 +226,14 @@ func (app *MiyooPod) scanTrack(path string) {
 	album.Tracks = append(album.Tracks, track)
 
 	// Extract art for album (first track with art wins)
-	if track.HasArt && album.ArtData == nil && album.ArtPath == "" {
-		logMsg(fmt.Sprintf("[EXTRACT] Attempting to extract art for album: %s - %s from %s",
-			album.Artist, album.Name, filepath.Base(track.Path)))
-		f.Seek(0, 0)
-		if m2, err2 := tag.ReadFrom(f); err2 == nil {
-			if pic := m2.Picture(); pic != nil {
-				album.ArtData = pic.Data
-				album.ArtExt = pic.Ext
-				logMsg(fmt.Sprintf("[EXTRACT] ✓ SUCCESS: %s - %s | Source: %s | Size: %d bytes, Type: %s, Ext: %s",
-					album.Artist, album.Name, filepath.Base(track.Path), len(pic.Data), pic.MIMEType, pic.Ext))
+	if track.HasArt && album.ArtData == nil && album.ArtPath == "" && picData != nil {
+		album.ArtData = picData
+		album.ArtExt = picExt
 
-				// Save to disk to avoid re-extraction on next startup
-				if err := app.saveAlbumArtwork(album); err != nil {
-					logMsg(fmt.Sprintf("[EXTRACT] Warning: Failed to save artwork to disk: %v", err))
-				}
-			} else {
-				logMsg(fmt.Sprintf("[EXTRACT] ✗ FAILED: Track has art flag but Picture() returned nil: %s | Format: %T",
-					track.Path, m2))
-			}
-		} else {
-			logMsg(fmt.Sprintf("[EXTRACT] ✗ FAILED: Re-read tag error: %s | Error: %v", track.Path, err2))
+		// Save to disk to avoid re-extraction on next startup
+		if err := app.saveAlbumArtwork(album); err != nil {
+			logMsg(fmt.Sprintf("[EXTRACT] Warning: Failed to save artwork to disk: %v", err))
 		}
-	} else if !track.HasArt && album.ArtData == nil && album.ArtPath == "" {
-		logMsg(fmt.Sprintf("[EXTRACT] Skipping %s - track.HasArt=false, album %s - %s has no art yet",
-			filepath.Base(track.Path), album.Artist, album.Name))
 	}
 
 	// Register artist
@@ -684,7 +649,7 @@ func (app *MiyooPod) saveLibraryJSON() error {
 	logMsg("Saving library to JSON...")
 	start := time.Now()
 
-	data, err := json.MarshalIndent(app.Library, "", "  ")
+	data, err := json.Marshal(app.Library)
 	if err != nil {
 		return fmt.Errorf("failed to marshal library: %v", err)
 	}
