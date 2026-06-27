@@ -21,6 +21,8 @@ func (app *MiyooPod) playTrackFromList(tracks []*Track, startIdx int) {
 
 	if app.Queue.Shuffle {
 		app.buildShuffleOrder(startIdx)
+		// buildShuffleOrder puts startIdx at index 0 of the shuffle order
+		app.Queue.CurrentIndex = 0
 	} else {
 		// Clear old shuffle order when playing without shuffle
 		app.Queue.ShuffleOrder = nil
