@@ -71,6 +71,10 @@ func (app *MiyooPod) startPlaybackPoller() {
 func (app *MiyooPod) mpvLoadFile(path string) error {
 	const maxRAMSize = 20 * 1024 * 1024 // 20MB
 
+	// Ensure hardware volume is set before playback starts.
+	// loadSettings may have set it too early (during Init) when MI_AO isn't ready yet.
+	setMiAOVolume(app.SystemVolume)
+
 	if info, err := os.Stat(path); err == nil && info.Size() > 0 && info.Size() < maxRAMSize {
 		loadErr := audioLoadFileToMemory(path)
 		if loadErr == nil {

@@ -603,10 +603,11 @@ type MiyooPod struct {
 	ErrorTime    time.Time
 
 	// Screen lock state
-	Locked               bool
-	BrightnessBeforeLock int
-	LastYTime            time.Time
-	LockKey              Key // Which key is used for lock/unlock (default Y)
+	Locked                 bool
+	BrightnessBeforeLock   int
+	BrightnessNeedsRestore bool // Defer brightness restore until after overlay is drawn
+	LastYTime              time.Time
+	LockKey                Key // Which key is used for lock/unlock (default Y)
 
 	// Power/Display management
 	LastActivityTime     time.Time   // Last user interaction time

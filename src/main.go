@@ -598,6 +598,17 @@ func (app *MiyooPod) drawCurrentScreen() {
 		return
 	}
 
+	// Restore brightness now that overlay is gone (avoids bright lock overlay flash)
+	if app.BrightnessNeedsRestore {
+		app.BrightnessNeedsRestore = false
+		if app.BrightnessBeforeLock > 0 {
+			setBrightness(app.BrightnessBeforeLock)
+		} else {
+			setBrightness(app.SystemBrightness)
+		}
+		app.setCPUGovernorUnlocked()
+	}
+
 	app.triggerRefresh()
 }
 

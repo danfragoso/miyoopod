@@ -923,14 +923,8 @@ func (app *MiyooPod) toggleLock() {
 			app.ScreenPeekTimer.Stop()
 			app.ScreenPeekActive = false
 		}
-		// Restore previous brightness
-		if app.BrightnessBeforeLock > 0 {
-			setBrightness(app.BrightnessBeforeLock)
-		} else {
-			setBrightness(100) // Default to 100 if no saved value
-		}
-		// Ramp CPU back to full speed for responsive UI
-		app.setCPUGovernorUnlocked()
+		// Defer brightness — restore after overlay is gone to avoid flash
+		app.BrightnessNeedsRestore = true
 	}
 
 	app.drawCurrentScreen()
@@ -978,7 +972,7 @@ func (app *MiyooPod) drawPowerExitWarning() {
 
 	dc.SetFontFace(app.FontTitle)
 	dc.SetHexColor("#FF4444")
-	dc.DrawStringAnchored("Keep holding to quit", centerX, centerY-10, 0.5, 0.5)
+	dc.DrawStringAnchored("Keep holding to exit MiyooPod", centerX, centerY-10, 0.5, 0.5)
 
 	dc.SetFontFace(app.FontSmall)
 	dc.SetHexColor("#CCCCCC")
