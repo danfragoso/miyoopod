@@ -1,7 +1,7 @@
 {
-    "version": "0.0.6",
-    "checksum": "sha256:2ac08e90cc933205df20abf775eebb82a1fedb2f0bed9307f79228fb90e9fa4e",
+    "version": "0.0.7",
+    "checksum": "sha256:552edf1e717c673294816e62b2fbc5779af6c96b706a6b56f53edce6effafd89",
     "url": "https://github.com/danfragoso/miyoopod/raw/refs/heads/main/releases/MiyooPod.zip",
-    "size": 20043372,
-    "changelog": "FLAC support, Lyrics and better list navigation"
+    "size": 20106614,
+    "changelog": "Single-button power lock, glyph atlas performance, faster library scan and shuffle fixes"
 }

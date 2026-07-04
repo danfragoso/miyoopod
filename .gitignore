@@ -1,2 +1,5 @@
 .DS_Store
 .env
+*.opus
+*.flac
+App/MiyooPod/miyoopod.log
