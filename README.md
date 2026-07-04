@@ -151,6 +151,32 @@ The build process uses CGO to compile Go source with C bindings and bundles all 
 
 ## Changelog
 
+### Version 0.0.7
+
+**New Features**
+- Single-button screen lock: press POWER to lock/unlock, hold POWER to quit the app
+- Bitrate and sample rate shown on the Now Playing format badge
+- Released under the MIT License, with third-party license notices included
+
+**Improvements**
+- Faster text rendering with a glyph and label sprite cache (glyph atlas)
+- Smoother menu navigation via frame caching and direct-pixel drawing in hot paths
+- Better battery life: adaptive polling, CPU governor lowered while locked, event-driven power button
+- Audio loaded into RAM to reduce SD card I/O during playback
+- Faster library scanning; album art no longer freezes the UI (pre-scaled artwork cache)
+- Now Playing layout refinements with centered controls and better use of space
+- Library scan skips macOS and Windows metadata files
+- Removed the screen peek feature — the screen stays off while locked
+
+**Bug Fixes**
+- Fixed track duration showing 0 on first play
+- Fixed zero volume when resuming a saved, paused session
+- Fixed brightness flash when unlocking
+- Fixed shuffle so selecting a song plays that exact song
+- Fixed the About screen reopening immediately after closing it
+- Fixed the marquee and progress bar drawing over the lock and power-exit overlays
+- Fixed race conditions that could corrupt the framebuffer during background work
+
 ### Version 0.0.6
 - FLAC and OGG/Vorbis playback support (decoded via statically linked drflac and stb_vorbis in SDL2_mixer)
 - Lyrics support: embedded lyrics (ID3 USLT, Vorbis comments) displayed with word-wrap and scroll

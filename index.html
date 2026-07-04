@@ -619,11 +619,45 @@
             <div class="max-w-4xl mx-auto">
                 <h2 class="text-4xl font-bold mb-12 text-center section-title">Changelog</h2>
                 
+                <!-- Version 0.0.7 -->
+                <div class="bg-white p-8 rounded-xl shadow-lg mb-8">
+                    <div class="flex items-center gap-4 mb-4">
+                        <span class="bg-blue-500 text-white px-4 py-1 rounded-full text-sm font-semibold">v0.0.7</span>
+                        <span class="text-gray-500 text-sm">Latest</span>
+                    </div>
+                    <h4 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">New Features</h4>
+                    <ul class="space-y-2 text-gray-700 mb-6 list-disc pl-5">
+                        <li>Single-button screen lock: press POWER to lock or unlock, and hold POWER to quit the app</li>
+                        <li>Bitrate and sample rate are now shown on the Now Playing format badge</li>
+                        <li>Released under the MIT License, with third-party license notices included</li>
+                    </ul>
+                    <h4 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Improvements</h4>
+                    <ul class="space-y-2 text-gray-700 mb-6 list-disc pl-5">
+                        <li>Faster text rendering with a glyph and label sprite cache (glyph atlas)</li>
+                        <li>Smoother menu navigation via frame caching and direct-pixel drawing in hot paths</li>
+                        <li>Better battery life: adaptive polling, CPU governor lowered while locked, and an event-driven power button</li>
+                        <li>Audio is loaded into RAM to reduce SD card I/O during playback</li>
+                        <li>Faster library scanning, and album art no longer freezes the UI (pre-scaled artwork cache)</li>
+                        <li>Now Playing layout refinements with centered controls and better use of space</li>
+                        <li>Library scan skips macOS and Windows metadata files</li>
+                        <li>Removed the screen peek feature — the screen stays off while locked</li>
+                    </ul>
+                    <h4 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Bug Fixes</h4>
+                    <ul class="space-y-2 text-gray-700 list-disc pl-5">
+                        <li>Fixed track duration showing 0 on first play</li>
+                        <li>Fixed zero volume when resuming a saved, paused session</li>
+                        <li>Fixed brightness flash when unlocking</li>
+                        <li>Fixed shuffle so selecting a song plays that exact song</li>
+                        <li>Fixed the About screen reopening immediately after closing it</li>
+                        <li>Fixed the marquee and progress bar drawing over the lock and power-exit overlays</li>
+                        <li>Fixed race conditions that could corrupt the framebuffer during background work</li>
+                    </ul>
+                </div>
+
                 <!-- Version 0.0.6 -->
                 <div class="bg-white p-8 rounded-xl shadow-lg mb-8">
                     <div class="flex items-center gap-4 mb-4">
-                        <span class="bg-blue-500 text-white px-4 py-1 rounded-full text-sm font-semibold">v0.0.6</span>
-                        <span class="text-gray-500 text-sm">Latest</span>
+                        <span class="bg-gray-400 text-white px-4 py-1 rounded-full text-sm font-semibold">v0.0.6</span>
                     </div>
                     <ul class="space-y-2 text-gray-700 list-disc pl-5">
                         <li>
