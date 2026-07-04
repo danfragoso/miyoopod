@@ -344,6 +344,9 @@ func (app *MiyooPod) clearAppData() {
 			app.performClearAppData()
 			return
 		case B, MENU:
+			// Clear armed key-repeat: this loop consumed the release of the
+			// key that opened the modal, so the main loop must not repeat it.
+			app.LastKey = NONE
 			app.drawCurrentScreen()
 			return
 		}

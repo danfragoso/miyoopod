@@ -75,9 +75,13 @@ func (app *MiyooPod) waitForAboutExit() {
 		}
 
 		if key == B || key == MENU {
-			// Return to menu
+			// Return to menu. Clear any armed key-repeat: the key that opened
+			// this screen had its release consumed by this loop, so the main
+			// loop must not auto-repeat it (which would reopen About).
+			app.LastKey = NONE
 			app.setScreen(ScreenMenu)
 			app.drawMenuScreen()
+			app.triggerRefresh()
 			return
 		}
 	}

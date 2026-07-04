@@ -13,11 +13,9 @@ const SETTINGS_PATH = "/mnt/SDCARD/Media/Music/.miyoopod_settings.json"
 type Settings struct {
 	InstallationID      string `json:"installation_id,omitempty"`
 	Theme               string `json:"theme,omitempty"`
-	LockKey             string `json:"lock_key,omitempty"`
 	LocalLogsEnabled    bool   `json:"local_logs_enabled,omitempty"`
 	SentryEnabled       bool   `json:"sentry_enabled,omitempty"`
 	AutoLockMinutes     *int   `json:"auto_lock_minutes,omitempty"`
-	ScreenPeekEnabled   *bool  `json:"screen_peek_enabled,omitempty"`
 	UpdateNotifications *bool  `json:"update_notifications,omitempty"`
 	Volume              *int   `json:"volume,omitempty"`
 	Brightness          *int   `json:"brightness,omitempty"`
@@ -58,19 +56,6 @@ func (app *MiyooPod) loadSettings() error {
 		}
 	}
 
-	// Restore lock key
-	if settings.LockKey != "" {
-		switch settings.LockKey {
-		case "Y":
-			app.LockKey = Y
-		case "X":
-			app.LockKey = X
-		case "SELECT":
-			app.LockKey = SELECT
-		}
-		logMsg(fmt.Sprintf("INFO: Restored lock key: %s", settings.LockKey))
-	}
-
 	// Restore log writing preference
 	app.LocalLogsEnabled = settings.LocalLogsEnabled
 	if app.LocalLogsEnabled {
@@ -97,16 +82,6 @@ func (app *MiyooPod) loadSettings() error {
 		}
 	}
 	// else keep default value (3 minutes)
-
-	// Restore screen peek preference (default to true if not set)
-	if settings.ScreenPeekEnabled != nil {
-		app.ScreenPeekEnabled = *settings.ScreenPeekEnabled
-		if app.ScreenPeekEnabled {
-			logMsg("Screen peek enabled")
-		} else {
-			logMsg("Screen peek disabled")
-		}
-	}
 
 	// Restore update notifications preference (default to true if not set)
 	if settings.UpdateNotifications != nil {
@@ -140,11 +115,9 @@ func (app *MiyooPod) saveSettings() error {
 	settings := Settings{
 		InstallationID:      app.InstallationID,
 		Theme:               app.CurrentTheme.Name,
-		LockKey:             app.getLockKeyName(),
 		LocalLogsEnabled:    app.LocalLogsEnabled,
 		SentryEnabled:       app.SentryEnabled,
 		AutoLockMinutes:     &app.AutoLockMinutes,
-		ScreenPeekEnabled:   &app.ScreenPeekEnabled,
 		UpdateNotifications: &app.UpdateNotifications,
 		Volume:              &app.SystemVolume,
 		Brightness:          &app.SystemBrightness,

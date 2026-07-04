@@ -65,28 +65,6 @@ func (app *MiyooPod) cycleAutoLock() {
 	}
 }
 
-// toggleScreenPeek toggles the screen peek while locked setting
-func (app *MiyooPod) toggleScreenPeek() {
-	app.ScreenPeekEnabled = !app.ScreenPeekEnabled
-
-	// Rebuild the settings menu to update the label
-	app.RootMenu = app.buildRootMenu()
-	app.MenuStack = []*MenuScreen{app.RootMenu}
-
-	for _, item := range app.RootMenu.Items {
-		if item.Label == "Settings" {
-			app.MenuStack = append(app.MenuStack, item.Submenu)
-			break
-		}
-	}
-
-	app.drawCurrentScreen()
-
-	if err := app.saveSettings(); err != nil {
-		logMsg(fmt.Sprintf("ERROR: Failed to save screen peek preference: %v", err))
-	}
-}
-
 // toggleSentry toggles the Sentry (developer logs) setting
 func (app *MiyooPod) toggleSentry() {
 	app.SentryEnabled = !app.SentryEnabled

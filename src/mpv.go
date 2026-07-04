@@ -19,8 +19,23 @@ func (app *MiyooPod) startPlaybackPoller() {
 			if state.Position >= 0 {
 				app.Playing.Position = state.Position
 			}
-			if state.Duration > 0 && app.Playing.Track != nil && app.Playing.Track.Duration == 0 {
-				app.Playing.Track.Duration = state.Duration
+			if state.Duration > 0 {
+				if app.Playing.Track != nil && app.Playing.Track.Duration == 0 {
+					app.Playing.Track.Duration = state.Duration
+				}
+				// Also update the live playing duration used by the progress bar.
+				// On first play track.Duration is unknown (0) until the backend
+				// reports it, so without this the bar shows a 0 duration.
+				if app.Playing.Duration == 0 {
+					app.Playing.Duration = state.Duration
+					app.NPCacheDirty = true
+					app.requestRedraw()
+				}
+				// Lazy-fill sample rate and (average) bitrate for the format badge
+				// now that the duration is known.
+				if app.Playing.Track != nil {
+					app.fillTrackTechInfo(app.Playing.Track, state.Duration)
+				}
 			}
 
 			if state.IsPaused && app.Playing.State != StatePaused {
@@ -82,6 +97,10 @@ func (app *MiyooPod) mpvLoadFile(path string) error {
 		if loadErr == nil {
 			playErr := audioPlay()
 			if playErr == nil {
+				// Re-apply volume now that the audio hardware is active. On a
+				// restored session the track is paused immediately after load,
+				// so the pre-play set above doesn't stick until this point.
+				setMiAOVolume(app.SystemVolume)
 				return nil
 			}
 			logMsg(fmt.Sprintf("WARNING: RAM play failed (%v), falling back to streaming: %s", playErr, path))
@@ -95,7 +114,11 @@ func (app *MiyooPod) mpvLoadFile(path string) error {
 	if err != nil {
 		return err
 	}
-	return audioPlay()
+	if err := audioPlay(); err != nil {
+		return err
+	}
+	setMiAOVolume(app.SystemVolume)
+	return nil
 }
 
 func (app *MiyooPod) mpvTogglePause() {

@@ -595,6 +595,10 @@ type MiyooPod struct {
 	// Key: text+font.Face pointer, Value: width in pixels
 	TextMeasureCache map[string]float64
 
+	// Glyph atlas: per-glyph sprite cache and composed label sprite cache
+	GlyphCache map[GlyphKey]*Glyph
+	LabelCache map[LabelKey]*LabelSprite
+
 	// Pre-rendered digit sprites for fast time display (bypass gg)
 	Digits *DigitSprites
 
@@ -613,8 +617,6 @@ type MiyooPod struct {
 	Locked                 bool
 	BrightnessBeforeLock   int
 	BrightnessNeedsRestore bool // Defer brightness restore until after overlay is drawn
-	LastYTime              time.Time
-	LockKey                Key // Which key is used for lock/unlock (default Y)
 
 	// Power/Display management
 	LastActivityTime     time.Time   // Last user interaction time
@@ -623,9 +625,6 @@ type MiyooPod struct {
 	MenuKeyPressed       bool        // Whether MENU key is currently held (for brightness control)
 	SelectKeyPressed     bool        // Whether SELECT is currently held (for combo shortcuts)
 	AutoLockMinutes      int         // Minutes of inactivity before auto-lock (0 = disabled)
-	ScreenPeekEnabled    bool        // Whether pressing buttons while locked briefly shows the screen
-	ScreenPeekActive     bool        // Whether screen is temporarily visible while locked
-	ScreenPeekTimer      *time.Timer // Timer to dim screen after peek
 
 	// CPU power management
 	OriginalCPUGovernor string      // Saved CPU governor to restore on exit

@@ -85,31 +85,6 @@ func (app *MiyooPod) resetInactivityTimer() {
 	app.LastActivityTime = time.Now()
 }
 
-// peekScreen temporarily shows the screen when locked (3 seconds)
-func (app *MiyooPod) peekScreen() {
-	if !app.ScreenPeekEnabled {
-		return
-	}
-
-	// Cancel any existing peek timer
-	if app.ScreenPeekTimer != nil {
-		app.ScreenPeekTimer.Stop()
-	}
-
-	// Restore brightness
-	restoreBrightness()
-	app.ScreenPeekActive = true
-
-	// Redraw screen to show current state
-	app.drawCurrentScreen()
-
-	// Set timer to dim screen after 3 seconds
-	app.ScreenPeekTimer = time.AfterFunc(3*time.Second, func() {
-		app.dimScreen()
-		app.ScreenPeekActive = false
-	})
-}
-
 // dimScreen reduces brightness to minimum (for locked state)
 func (app *MiyooPod) dimScreen() {
 	brightnessPath := "/sys/class/pwm/pwmchip0/pwm0/duty_cycle"

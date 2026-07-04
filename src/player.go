@@ -370,8 +370,8 @@ func (app *MiyooPod) updateProgressBarOnly() {
 		return
 	}
 
-	// Don't draw progress bar over lock or volume/brightness overlay
-	if app.Locked || app.OverlayVisible {
+	// Don't draw progress bar over lock, volume/brightness, or power-exit overlay
+	if app.Locked || app.OverlayVisible || app.PowerExitWarning {
 		return
 	}
 

@@ -73,13 +73,13 @@ func (app *MiyooPod) Init() {
 		CoverCache: make(map[string]image.Image),
 	}
 	app.TextMeasureCache = make(map[string]float64)
+	app.GlyphCache = make(map[GlyphKey]*Glyph)
+	app.LabelCache = make(map[LabelKey]*LabelSprite)
 	app.RefreshChan = make(chan struct{}, 1)
 	app.RedrawChan = make(chan struct{}, 1)
-	app.LockKey = Y // Default lock key
 
 	// Power management defaults
 	app.AutoLockMinutes = 3 // Auto-lock after 3 minutes of inactivity
-	app.ScreenPeekEnabled = true
 	app.UpdateNotifications = true // Default: show update prompts
 	app.LastActivityTime = time.Now()
 
@@ -293,12 +293,16 @@ func main() {
 				}
 			} else {
 				key := Key(keyEvent)
-				app.handleKey(key)
-				// Arm repeat for navigation keys
+				// Arm repeat for navigation keys BEFORE handling the key.
+				// A blocking modal (e.g. the About screen) may consume the
+				// matching key-release, so arming afterwards would leave the
+				// key stuck "held" and auto-repeat it on return. Arming first
+				// lets such modals clear LastKey to cancel the phantom repeat.
 				if key == UP || key == DOWN || key == LEFT || key == RIGHT {
 					app.LastKey = key
 					app.LastKeyTime = time.Now()
 				}
+				app.handleKey(key)
 			}
 		}
 
@@ -416,36 +420,10 @@ func (app *MiyooPod) handleKey(key Key) {
 		return
 	}
 
-	// If locked, handle peek or unlock
+	// If locked, swallow all controller keys so nothing triggers accidentally.
+	// Lock/unlock is handled solely by the POWER button (see input.go).
 	if app.Locked {
-		// Check for double-press of lock key to unlock
-		if key == app.LockKey {
-			now := time.Now()
-			if now.Sub(app.LastYTime) < 500*time.Millisecond {
-				// Double press detected - unlock
-				app.toggleLock()
-			} else {
-				// Single press - just peek
-				app.peekScreen()
-			}
-			app.LastYTime = now
-		} else {
-			// Any other key - just peek the screen
-			app.peekScreen()
-		}
 		return
-	}
-
-	// Handle lock key double-press for locking when unlocked
-	if key == app.LockKey {
-		now := time.Now()
-		if now.Sub(app.LastYTime) < 500*time.Millisecond {
-			// Double press detected - lock
-			app.toggleLock()
-			return
-		}
-		app.LastYTime = now
-		// Fall through to normal key handling
 	}
 
 	// If search panel is active, it consumes most keys

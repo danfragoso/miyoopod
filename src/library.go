@@ -774,6 +774,36 @@ func (app *MiyooPod) loadLibraryJSON() error {
 	return nil
 }
 
+// fillTrackTechInfo lazily populates the track's sample rate and average bitrate
+// (used by the Now Playing format badge). Cheap and idempotent: it only reads the
+// file header / stats the file when a value is still missing.
+func (app *MiyooPod) fillTrackTechInfo(track *Track, duration float64) {
+	if track == nil {
+		return
+	}
+
+	if track.SampleRate == 0 {
+		if sr := readSampleRate(track.Path); sr > 0 {
+			track.SampleRate = sr
+			app.NPCacheDirty = true
+			app.requestRedraw()
+		}
+	}
+
+	// Average bitrate (kbps) derived from file size and duration. Works for both
+	// CBR and VBR streams and matches what the badge expects.
+	if track.Bitrate == 0 && duration > 0 {
+		if info, err := os.Stat(track.Path); err == nil && info.Size() > 0 {
+			bitrate := int(float64(info.Size()) * 8 / duration / 1000)
+			if bitrate > 0 {
+				track.Bitrate = bitrate
+				app.NPCacheDirty = true
+				app.requestRedraw()
+			}
+		}
+	}
+}
+
 // readSampleRate parses the sample rate directly from the audio file header.
 // Supports FLAC (STREAMINFO block), OGG Vorbis (identification header), and MP3 (sync frame).
 func readSampleRate(path string) int {

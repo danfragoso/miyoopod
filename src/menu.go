@@ -302,18 +302,6 @@ func (app *MiyooPod) buildSettingsMenuItems(root *MenuScreen) []*MenuItem {
 		},
 	})
 
-	// Screen Peek option
-	peekStatus := "Off"
-	if app.ScreenPeekEnabled {
-		peekStatus = "On"
-	}
-	items = append(items, &MenuItem{
-		Label: "Screen Peek: " + peekStatus,
-		Action: func() {
-			app.toggleScreenPeek()
-		},
-	})
-
 	// Check for Updates
 	items = append(items, &MenuItem{
 		Label: "Check for Updates",
@@ -565,7 +553,7 @@ func (app *MiyooPod) drawStandardMenuCached(current *MenuScreen) {
 
 		// Draw new selection as selected
 		newSel := current.SelIndex
-		if newSel >= current.ScrollOff && newSel < current.ScrollOff+VISIBLE_ITEMS {
+		if newSel >= current.ScrollOff && newSel < current.ScrollOff+VISIBLE_ITEMS && newSel < len(current.Items) {
 			newItem := current.Items[newSel]
 			newY := MENU_TOP_Y + (newSel-current.ScrollOff)*MENU_ITEM_HEIGHT
 			isPlaying := newItem.Track != nil && app.Playing != nil && app.Playing.Track != nil && newItem.Track.Path == app.Playing.Track.Path
@@ -915,24 +903,4 @@ func (app *MiyooPod) rescanLibrary() {
 		app.RootMenu = app.buildRootMenu()
 		app.MenuStack = []*MenuScreen{app.RootMenu}
 	})
-}
-
-// getLockKeyName returns the display name of the current lock key
-func (app *MiyooPod) getLockKeyName() string {
-	switch app.LockKey {
-	case Y:
-		return "Y"
-	case X:
-		return "X"
-	case SELECT:
-		return "SELECT"
-	case MENU:
-		return "MENU"
-	case L2:
-		return "L2"
-	case R2:
-		return "R2"
-	default:
-		return "Y"
-	}
 }

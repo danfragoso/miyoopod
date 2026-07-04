@@ -166,7 +166,7 @@ func (app *MiyooPod) advanceMarquee() {
 // Called from the main loop at ~30Hz. Only updates when marquee is actively scrolling.
 func (app *MiyooPod) pollMarquee() {
 	screenHasMarquee := app.CurrentScreen == ScreenMenu || app.CurrentScreen == ScreenQueue
-	if app.MarqueeBuf == nil || !screenHasMarquee || app.MarqueeDstW <= 0 || app.Locked || app.OverlayVisible || app.LastKey != NONE {
+	if app.MarqueeBuf == nil || !screenHasMarquee || app.MarqueeDstW <= 0 || app.Locked || app.OverlayVisible || app.PowerExitWarning || app.LastKey != NONE {
 		return
 	}
 
@@ -896,11 +896,6 @@ func (app *MiyooPod) toggleLock() {
 	if app.Locked {
 		logMsg("INFO: Screen locked")
 		TrackAction("screen_locked", nil)
-		// Cancel any active peek timer
-		if app.ScreenPeekTimer != nil {
-			app.ScreenPeekTimer.Stop()
-			app.ScreenPeekActive = false
-		}
 		// Save current brightness and fully dim the screen
 		app.BrightnessBeforeLock = getBrightness()
 		app.dimScreen()
@@ -909,11 +904,6 @@ func (app *MiyooPod) toggleLock() {
 	} else {
 		logMsg("INFO: Screen unlocked")
 		TrackAction("screen_unlocked", nil)
-		// Cancel any active peek timer
-		if app.ScreenPeekTimer != nil {
-			app.ScreenPeekTimer.Stop()
-			app.ScreenPeekActive = false
-		}
 		// Defer brightness — restore after overlay is gone to avoid flash
 		app.BrightnessNeedsRestore = true
 	}
@@ -941,8 +931,7 @@ func (app *MiyooPod) drawLockOverlay() {
 	// Hint text
 	dc.SetFontFace(app.FontSmall)
 	dc.SetHexColor("#CCCCCC")
-	lockKeyName := app.getLockKeyName()
-	dc.DrawStringAnchored(fmt.Sprintf("Press POWER or double-press %s to unlock", lockKeyName), centerX, centerY+15, 0.5, 0.5)
+	dc.DrawStringAnchored("Press POWER to unlock", centerX, centerY+15, 0.5, 0.5)
 
 	// Exit hint
 	dc.SetHexColor("#999999")
