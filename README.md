@@ -72,7 +72,8 @@ For albums without embedded artwork, MiyooPod can automatically fetch album cove
 ## Settings
 
 - **Themes** - Choose from 17 visual themes (Classic iPod, Dark, Dark Blue, Light, Nord, Solarized Dark, Matrix Green, Retro Amber, Purple Haze, Cyberpunk, Coffee, Ocean, Forest, Sunset, Neon, Midnight, Gruvbox, Candy)
-- **Lock Key** - Customize which button locks/unlocks the screen (Y, X, or SELECT). The Miyoo Mini Plus doesn't support suspend mode natively, so the lock key prevents accidental presses during playback
+- **Screen Lock** - Press the POWER button to lock/unlock the screen, preventing accidental presses during playback. Hold POWER for a few seconds to quit the app
+- **Auto Screen Lock** - Automatically lock after a period of inactivity (1/3/5/10 min, or disabled)
 - **Fetch Album Art** - Automatically download missing album artwork from MusicBrainz
 - **Check for Updates** - Manually check for and install OTA updates
 - **Update Notifications** - Toggle automatic update prompts on/off
@@ -151,61 +152,61 @@ The build process uses CGO to compile Go source with C bindings and bundles all 
 ## Changelog
 
 ### Version 0.0.6
-- 🎵 FLAC and OGG/Vorbis playback support (decoded via statically linked drflac and stb_vorbis in SDL2_mixer)
-- 📝 Lyrics support: embedded lyrics (ID3 USLT, Vorbis comments) displayed with word-wrap and scroll
-- 🎤 LRC timed lyrics: synced highlighting of the current line with auto-scroll and manual scroll override
-- ⏩ Hold ↑/↓ to scroll lists continuously without repeated presses
-- ❌ SELECT + START to quit the app
+- FLAC and OGG/Vorbis playback support (decoded via statically linked drflac and stb_vorbis in SDL2_mixer)
+- Lyrics support: embedded lyrics (ID3 USLT, Vorbis comments) displayed with word-wrap and scroll
+- LRC timed lyrics: synced highlighting of the current line with auto-scroll and manual scroll override
+- Hold ↑/↓ to scroll lists continuously without repeated presses
+- SELECT + START to quit the app
 
 ### Version 0.0.5
-- 🔄 Over-the-air updates with download progress, checksum verification, and automatic rollback on failure
-- 🔍 Search: filter Artists, Albums, and Songs with an on-screen A-Z keyboard (press SELECT on any list)
-- ⏩ Seek/fast-forward/rewind: hold L or R on the Now Playing screen with accelerating speed
-- 💾 Session persistence: queue, playback position, shuffle/repeat state, and current track restored across launches
-- 📜 Header marquee: now-playing track info scrolls in the header bar when browsing menus
-- 🛡️ Crash reporting: fatal panics and C-level signals are logged and reported automatically
-- 🗑️ Clear App Data option in Settings to reset library cache, settings, and artwork
-- ⚡ Faster startup: version check no longer blocks splash screen; album art uses fast RGBA pixel cache on disk
-- 🔄 Non-blocking library scan with dedicated progress screen showing track count, current folder, and phase
-- 🖼️ Non-blocking album art fetch with progress bar, percentage, and cancel/retry support
-- 🔊 Volume and brightness persisted across app launches
-- 🖼️ Background album art extraction from MP3 tags after startup
-- 🔔 Toggle update notifications on/off from Settings
-- 🔍 Manual "Check for Updates" option in Settings
-- 🐛 Fixed race conditions where background goroutines corrupted the framebuffer causing panics
-- 🐛 Fixed volume/brightness overlay screen flash caused by partial framebuffer updates
-- 🐛 Fixed volume resetting on every launch
+- Over-the-air updates with download progress, checksum verification, and automatic rollback on failure
+- Search: filter Artists, Albums, and Songs with an on-screen A-Z keyboard (press SELECT on any list)
+- Seek/fast-forward/rewind: hold L or R on the Now Playing screen with accelerating speed
+- Session persistence: queue, playback position, shuffle/repeat state, and current track restored across launches
+- Header marquee: now-playing track info scrolls in the header bar when browsing menus
+- Crash reporting: fatal panics and C-level signals are logged and reported automatically
+- Clear App Data option in Settings to reset library cache, settings, and artwork
+- Faster startup: version check no longer blocks splash screen; album art uses fast RGBA pixel cache on disk
+- Non-blocking library scan with dedicated progress screen showing track count, current folder, and phase
+- Non-blocking album art fetch with progress bar, percentage, and cancel/retry support
+- Volume and brightness persisted across app launches
+- Background album art extraction from MP3 tags after startup
+- Toggle update notifications on/off from Settings
+- Manual "Check for Updates" option in Settings
+- Fixed race conditions where background goroutines corrupted the framebuffer causing panics
+- Fixed volume/brightness overlay screen flash caused by partial framebuffer updates
+- Fixed volume resetting on every launch
 
 ### Version 0.0.4
-- 🔊 Fixed volume control using MI_AO ioctl (correct indirect buffer layout matching Onion/keymon)
-- 🔊 Fixed volume icon SVG being cut off in the overlay
--  🔒 Added screen lock with power button
-- 🔒 Added auto screen lock setting (1/3/5/10 min or disabled)
-- 🔒 Added screen peek toggle setting (enable/disable screen wake on button press while locked)
-- 🐛 Fixed brightness and volume being adjustable while screen is locked
-- 🐛 Fixed now playing progress bar drawing over the lock overlay
+- Fixed volume control using MI_AO ioctl (correct indirect buffer layout matching Onion/keymon)
+- Fixed volume icon SVG being cut off in the overlay
+- Added screen lock with power button
+- Added auto screen lock setting (1/3/5/10 min or disabled)
+- Added screen peek toggle setting (enable/disable screen wake on button press while locked)
+- Fixed brightness and volume being adjustable while screen is locked
+- Fixed now playing progress bar drawing over the lock overlay
 
 ### Version 0.0.3
-- 🔧 Fixed PostHog logging initialization order
-- 📊 C logs from SDL initialization now properly captured
-- 📱 Device model detection and reporting (Mini Plus, Mini v4, Mini Flip)
-- 📏 Display resolution metrics sent to analytics
-- 🔀 Independent local logs and developer logs settings
+- Fixed PostHog logging initialization order
+- C logs from SDL initialization now properly captured
+- Device model detection and reporting (Mini Plus, Mini v4, Mini Flip)
+- Display resolution metrics sent to analytics
+- Independent local logs and developer logs settings
 
 ### Version 0.0.2
-- ✨ Added support for Miyoo Mini v4 (750×560 resolution)
-- ✨ Added support for Miyoo Mini Flip (750×560 resolution)
-- 🔧 Automatic resolution detection via framebuffer device
-- 🎨 UI scaling adapts to different screen sizes while maintaining aspect ratio
-- 🐛 Disabled local logs by default (developer logs still enabled)
+- Added support for Miyoo Mini v4 (750×560 resolution)
+- Added support for Miyoo Mini Flip (750×560 resolution)
+- Automatic resolution detection via framebuffer device
+- UI scaling adapts to different screen sizes while maintaining aspect ratio
+- Disabled local logs by default (developer logs still enabled)
 
 ### Version 0.0.1
-- 🎉 Initial release
-- 🎵 iPod-inspired user interface
-- 🎨 11 customizable themes
-- 🖼️ Album art display and automatic fetching from MusicBrainz
-- 🔀 Shuffle and repeat modes
-- 📱 Optimized for Miyoo Mini Plus (640×480)
+- Initial release
+- iPod-inspired user interface
+- 11 customizable themes
+- Album art display and automatic fetching from MusicBrainz
+- Shuffle and repeat modes
+- Optimized for Miyoo Mini Plus (640×480)
 
 ## Contributing
 
@@ -215,9 +216,19 @@ MiyooPod is open-source! Contributions are welcome.
 - **Request features:** [New Issue](https://github.com/danfragoso/miyoopod/issues/new)
 - **Submit PRs:** [Pull Requests](https://github.com/danfragoso/miyoopod/pulls)
 
+## AI Generated Content
+
+MiyooPod was developed with the help of AI coding assistant tools, and portions of its codebase include AI-generated code.
+
+## User Data
+
+MiyooPod uses PostHog to capture error logs, exceptions, crashes, and user interactions. If you are not comfortable with this, you can go into **Settings** and disable the **Developer Logs** option.
+
 ## License
 
-Open Source
+MiyooPod is released under the [MIT License](LICENSE).
+
+This project bundles and depends on third-party software under their own licenses. See [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for details.
 
 ## Author
 
