@@ -160,3 +160,43 @@ func (app *MiyooPod) restoreCPUGovernor() {
 		logMsg(fmt.Sprintf("INFO: CPU governor restored to %s", app.OriginalCPUGovernor))
 	}
 }
+
+// cpuOnLockLabel returns the settings menu label for the CPU-on-lock option.
+func (app *MiyooPod) cpuOnLockLabel() string {
+	if app.KeepPerformanceOnLock {
+		return "CPU on Lock: Performance"
+	}
+	return "CPU on Lock: Power Save"
+}
+
+// toggleKeepPerformanceOnLock flips whether the CPU stays in performance while
+// the screen is locked (instead of dropping to powersave). It updates the menu
+// label in place and, if currently locked, applies the change immediately.
+func (app *MiyooPod) toggleKeepPerformanceOnLock() {
+	app.KeepPerformanceOnLock = !app.KeepPerformanceOnLock
+
+	// Apply immediately if the screen is already locked.
+	if app.Locked {
+		if app.KeepPerformanceOnLock {
+			app.setCPUGovernorUnlocked()
+		} else {
+			app.setCPUGovernorLocked()
+		}
+	}
+
+	// Update the current menu item's label in place (avoids resetting the
+	// menu selection, which could otherwise trigger an accidental submenu entry).
+	if len(app.MenuStack) > 0 {
+		current := app.MenuStack[len(app.MenuStack)-1]
+		if current.SelIndex >= 0 && current.SelIndex < len(current.Items) {
+			current.Items[current.SelIndex].Label = app.cpuOnLockLabel()
+		}
+	}
+
+	app.MenuBG = nil // force redraw with updated label
+	app.drawCurrentScreen()
+
+	if err := app.saveSettings(); err != nil {
+		logMsg(fmt.Sprintf("ERROR: Failed to save CPU-on-lock preference: %v", err))
+	}
+}

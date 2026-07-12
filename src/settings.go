@@ -11,15 +11,16 @@ import (
 const SETTINGS_PATH = "/mnt/SDCARD/Media/Music/.miyoopod_settings.json"
 
 type Settings struct {
-	InstallationID      string `json:"installation_id,omitempty"`
-	Theme               string `json:"theme,omitempty"`
-	LocalLogsEnabled    bool   `json:"local_logs_enabled,omitempty"`
-	SentryEnabled       bool   `json:"sentry_enabled,omitempty"`
-	AutoLockMinutes     *int   `json:"auto_lock_minutes,omitempty"`
-	UpdateNotifications *bool  `json:"update_notifications,omitempty"`
-	Volume              *int   `json:"volume,omitempty"`
-	Brightness          *int   `json:"brightness,omitempty"`
-	FontSize            *int   `json:"font_size,omitempty"`
+	InstallationID        string `json:"installation_id,omitempty"`
+	Theme                 string `json:"theme,omitempty"`
+	LocalLogsEnabled      bool   `json:"local_logs_enabled,omitempty"`
+	SentryEnabled         bool   `json:"sentry_enabled,omitempty"`
+	AutoLockMinutes       *int   `json:"auto_lock_minutes,omitempty"`
+	UpdateNotifications   *bool  `json:"update_notifications,omitempty"`
+	Volume                *int   `json:"volume,omitempty"`
+	Brightness            *int   `json:"brightness,omitempty"`
+	FontSize              *int   `json:"font_size,omitempty"`
+	KeepPerformanceOnLock *bool  `json:"keep_performance_on_lock,omitempty"`
 }
 
 // loadSettings loads theme and lock key preferences from a lightweight JSON file
@@ -117,21 +118,32 @@ func (app *MiyooPod) loadSettings() error {
 		}
 	}
 
+	// Restore keep-performance-on-lock preference (default false = drop to powersave)
+	if settings.KeepPerformanceOnLock != nil {
+		app.KeepPerformanceOnLock = *settings.KeepPerformanceOnLock
+		if app.KeepPerformanceOnLock {
+			logMsg("Keep performance while locked: enabled")
+		} else {
+			logMsg("Keep performance while locked: disabled")
+		}
+	}
+
 	return nil
 }
 
 // saveSettings saves current theme and lock key preferences
 func (app *MiyooPod) saveSettings() error {
 	settings := Settings{
-		InstallationID:      app.InstallationID,
-		Theme:               app.CurrentTheme.Name,
-		LocalLogsEnabled:    app.LocalLogsEnabled,
-		SentryEnabled:       app.SentryEnabled,
-		AutoLockMinutes:     &app.AutoLockMinutes,
-		UpdateNotifications: &app.UpdateNotifications,
-		Volume:              &app.SystemVolume,
-		Brightness:          &app.SystemBrightness,
-		FontSize:            &app.FontSize,
+		InstallationID:        app.InstallationID,
+		Theme:                 app.CurrentTheme.Name,
+		LocalLogsEnabled:      app.LocalLogsEnabled,
+		SentryEnabled:         app.SentryEnabled,
+		AutoLockMinutes:       &app.AutoLockMinutes,
+		UpdateNotifications:   &app.UpdateNotifications,
+		Volume:                &app.SystemVolume,
+		Brightness:            &app.SystemBrightness,
+		FontSize:              &app.FontSize,
+		KeepPerformanceOnLock: &app.KeepPerformanceOnLock,
 	}
 
 	data, err := json.MarshalIndent(settings, "", "  ")

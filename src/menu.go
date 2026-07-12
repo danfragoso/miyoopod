@@ -310,6 +310,14 @@ func (app *MiyooPod) buildSettingsMenuItems(root *MenuScreen) []*MenuItem {
 		},
 	})
 
+	// CPU governor while locked
+	items = append(items, &MenuItem{
+		Label: app.cpuOnLockLabel(),
+		Action: func() {
+			app.toggleKeepPerformanceOnLock()
+		},
+	})
+
 	// Check for Updates
 	items = append(items, &MenuItem{
 		Label: "Check for Updates",

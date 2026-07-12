@@ -664,10 +664,11 @@ type MiyooPod struct {
 	AutoLockMinutes      int         // Minutes of inactivity before auto-lock (0 = disabled)
 
 	// CPU power management
-	OriginalCPUGovernor string      // Saved CPU governor to restore on exit
-	PowerHoldTimer      *time.Timer // 1s timer — show exit warning
-	PowerExitTimer      *time.Timer // 2s timer — graceful exit
-	PowerExitWarning    bool        // Exit warning overlay is visible
+	KeepPerformanceOnLock bool        // If true, keep performance governor while locked (don't drop to powersave)
+	OriginalCPUGovernor   string      // Saved CPU governor to restore on exit
+	PowerHoldTimer        *time.Timer // 1s timer — show exit warning
+	PowerExitTimer        *time.Timer // 2s timer — graceful exit
+	PowerExitWarning      bool        // Exit warning overlay is visible
 
 	// Deferred operations (set by goroutines, handled by main loop)
 	TrackEndPending bool // Poller detected track ended, main loop calls handleTrackEnd
