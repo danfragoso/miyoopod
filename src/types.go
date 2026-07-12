@@ -11,7 +11,7 @@ import (
 
 // App metadata
 const (
-	APP_VERSION = "0.0.7"
+	APP_VERSION = "0.0.8"
 	APP_AUTHOR  = "Danilo Fragoso"
 	SUPPORT_URL = "https://github.com/danfragoso/miyoopod"
 )

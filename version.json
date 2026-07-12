@@ -1,7 +1,7 @@
 {
-    "version": "0.0.7",
-    "checksum": "sha256:552edf1e717c673294816e62b2fbc5779af6c96b706a6b56f53edce6effafd89",
+    "version": "0.0.8",
+    "checksum": "sha256:edc30582ef83317986b1654374b50cc481a07ab617b8bd0cedc225ce998fa860",
     "url": "https://github.com/danfragoso/miyoopod/raw/refs/heads/main/releases/MiyooPod.zip",
-    "size": 20106614,
-    "changelog": "Single-button power lock, glyph atlas performance, faster library scan and shuffle fixes"
+    "size": 20112406,
+    "changelog": "Added adjustable font size (Small/Medium/Large) and a CPU-on-Lock option to keep the performance governor while the screen is locked."
 }

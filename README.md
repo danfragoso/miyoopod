@@ -151,6 +151,12 @@ The build process uses CGO to compile Go source with C bindings and bundles all 
 
 ## Changelog
 
+### Version 0.0.8
+
+**New Features**
+- Adjustable font size (Small/Medium/Large) from Settings
+- CPU on Lock setting to keep the performance governor while the screen is locked (instead of dropping to power save)
+
 ### Version 0.0.7
 
 **New Features**
