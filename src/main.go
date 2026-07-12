@@ -59,6 +59,7 @@ func (app *MiyooPod) Init() {
 	app.FB, _ = app.DC.Image().(*image.RGBA)
 
 	// Load fonts
+	app.FontSize = FontSizeMedium // default; overridden by loadSettings
 	app.loadFonts()
 
 	// Init state
@@ -124,19 +125,20 @@ func (app *MiyooPod) Init() {
 
 func (app *MiyooPod) loadFonts() {
 	fontPath := "./assets/ui_font.ttf"
+	scale := fontScaleFactor(app.FontSize)
 
 	var err error
-	app.FontHeader, err = gg.LoadFontFace(fontPath, FONT_SIZE_HEADER)
+	app.FontHeader, err = gg.LoadFontFace(fontPath, FONT_SIZE_HEADER*scale)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to load font: %v", err))
 	}
 
-	app.FontMenu, _ = gg.LoadFontFace(fontPath, FONT_SIZE_MENU)
-	app.FontTitle, _ = gg.LoadFontFace(fontPath, FONT_SIZE_TITLE)
-	app.FontArtist, _ = gg.LoadFontFace(fontPath, FONT_SIZE_ARTIST)
-	app.FontAlbum, _ = gg.LoadFontFace(fontPath, FONT_SIZE_ALBUM)
-	app.FontTime, _ = gg.LoadFontFace(fontPath, FONT_SIZE_TIME)
-	app.FontSmall, _ = gg.LoadFontFace(fontPath, FONT_SIZE_SMALL)
+	app.FontMenu, _ = gg.LoadFontFace(fontPath, FONT_SIZE_MENU*scale)
+	app.FontTitle, _ = gg.LoadFontFace(fontPath, FONT_SIZE_TITLE*scale)
+	app.FontArtist, _ = gg.LoadFontFace(fontPath, FONT_SIZE_ARTIST*scale)
+	app.FontAlbum, _ = gg.LoadFontFace(fontPath, FONT_SIZE_ALBUM*scale)
+	app.FontTime, _ = gg.LoadFontFace(fontPath, FONT_SIZE_TIME*scale)
+	app.FontSmall, _ = gg.LoadFontFace(fontPath, FONT_SIZE_SMALL*scale)
 }
 
 func (app *MiyooPod) RunUI() {

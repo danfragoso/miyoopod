@@ -266,6 +266,14 @@ func (app *MiyooPod) buildSettingsMenuItems(root *MenuScreen) []*MenuItem {
 		Submenu:    themesMenu,
 	})
 
+	// Font Size option
+	items = append(items, &MenuItem{
+		Label: "Font Size: " + fontSizeName(app.FontSize),
+		Action: func() {
+			app.cycleFontSize()
+		},
+	})
+
 	// Local Logs option
 	localLogStatus := "Off"
 	if app.LocalLogsEnabled {

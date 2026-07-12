@@ -40,7 +40,8 @@ const (
 	PROGRESS_BAR_H    = 8
 )
 
-// Font sizes at native resolution
+// Base font sizes at native resolution (medium / 1.0 scale).
+// Actual sizes are these multiplied by the current font scale — see fontScaleFactor.
 const (
 	FONT_SIZE_HEADER = 22.0
 	FONT_SIZE_MENU   = 24.0
@@ -50,6 +51,39 @@ const (
 	FONT_SIZE_TIME   = 18.0
 	FONT_SIZE_SMALL  = 16.0
 )
+
+// Font size presets. The scale is kept within a range that still fits the
+// fixed row height (MENU_ITEM_HEIGHT), so layout metrics don't need to change.
+const (
+	FontSizeSmall  = 0
+	FontSizeMedium = 1
+	FontSizeLarge  = 2
+)
+
+// fontScaleFactor maps a font size preset to a multiplier applied to the base
+// font sizes above.
+func fontScaleFactor(preset int) float64 {
+	switch preset {
+	case FontSizeSmall:
+		return 0.85
+	case FontSizeLarge:
+		return 1.15
+	default:
+		return 1.0
+	}
+}
+
+// fontSizeName returns a human-readable label for a font size preset.
+func fontSizeName(preset int) string {
+	switch preset {
+	case FontSizeSmall:
+		return "Small"
+	case FontSizeLarge:
+		return "Large"
+	default:
+		return "Medium"
+	}
+}
 
 // Theme defines a color scheme
 type Theme struct {
@@ -565,6 +599,9 @@ type MiyooPod struct {
 
 	// Theme
 	CurrentTheme Theme
+
+	// Font size preset (FontSizeSmall/Medium/Large)
+	FontSize int
 
 	// Music data
 	Library *Library
