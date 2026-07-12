@@ -19,6 +19,7 @@ type Settings struct {
 	UpdateNotifications *bool  `json:"update_notifications,omitempty"`
 	Volume              *int   `json:"volume,omitempty"`
 	Brightness          *int   `json:"brightness,omitempty"`
+	FontSize            *int   `json:"font_size,omitempty"`
 }
 
 // loadSettings loads theme and lock key preferences from a lightweight JSON file
@@ -107,6 +108,15 @@ func (app *MiyooPod) loadSettings() error {
 		logMsg(fmt.Sprintf("INFO: Restored brightness: %d%%", app.SystemBrightness))
 	}
 
+	// Restore font size (default Medium if not set)
+	if settings.FontSize != nil && *settings.FontSize != app.FontSize {
+		if *settings.FontSize >= FontSizeSmall && *settings.FontSize <= FontSizeLarge {
+			app.FontSize = *settings.FontSize
+			app.applyFontSize()
+			logMsg(fmt.Sprintf("INFO: Restored font size: %s", fontSizeName(app.FontSize)))
+		}
+	}
+
 	return nil
 }
 
@@ -121,6 +131,7 @@ func (app *MiyooPod) saveSettings() error {
 		UpdateNotifications: &app.UpdateNotifications,
 		Volume:              &app.SystemVolume,
 		Brightness:          &app.SystemBrightness,
+		FontSize:            &app.FontSize,
 	}
 
 	data, err := json.MarshalIndent(settings, "", "  ")
